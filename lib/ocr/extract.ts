@@ -204,7 +204,9 @@ function parseGeminiResponse(response: any): ExtractedInvoiceData {
   return {
     supplier_name: parsedData.supplier_name || null,
     supplier_tax_id: parsedData.supplier_tax_id || null,
+    invoice_number: parsedData.invoice_number || null,
     invoice_date: parsedData.invoice_date || null,
+    currency: parsedData.currency || null,
     total_amount: parsedData.total_amount ? Number(parsedData.total_amount) : null,
     vat_amount: parsedData.vat_amount ? Number(parsedData.vat_amount) : null,
     document_type: parsedData.document_type || 'other',
