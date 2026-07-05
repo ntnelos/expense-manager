@@ -55,23 +55,23 @@ export default function RecentActivity({ invoices, expenseLines, loading }: Rece
       {/* Recent Invoices */}
       <div className="card animate-in">
         <div className="card-header">
-          <h3 className="card-title">🧾 Recent Invoices</h3>
+          <h3 className="card-title">🧾 חשבוניות אחרונות</h3>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
           {invoices.length === 0 ? (
             <div className="empty-state" style={{ padding: 'var(--space-10)' }}>
               <div className="empty-state-icon">🧾</div>
-              <div className="empty-state-title">No invoices yet</div>
-              <div className="empty-state-text">Upload your first invoice to get started</div>
+              <div className="empty-state-title">אין עדיין חשבוניות</div>
+              <div className="empty-state-text">העלה את החשבונית הראשונה שלך כדי להתחיל</div>
             </div>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Source</th>
-                  <th>Supplier</th>
-                  <th>Amount</th>
-                  <th>Status</th>
+                  <th>מקור</th>
+                  <th>ספק</th>
+                  <th>סכום</th>
+                  <th>סטטוס</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,23 +94,23 @@ export default function RecentActivity({ invoices, expenseLines, loading }: Rece
       {/* Recent Expense Lines */}
       <div className="card animate-in">
         <div className="card-header">
-          <h3 className="card-title">🏦 Recent Expense Lines</h3>
+          <h3 className="card-title">🏦 שורות הוצאה אחרונות</h3>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
           {expenseLines.length === 0 ? (
             <div className="empty-state" style={{ padding: 'var(--space-10)' }}>
               <div className="empty-state-icon">🏦</div>
-              <div className="empty-state-title">No expense lines yet</div>
-              <div className="empty-state-text">Import a bank CSV/Excel file to get started</div>
+              <div className="empty-state-title">אין עדיין שורות הוצאה</div>
+              <div className="empty-state-text">ייבא קובץ בנק כדי להתחיל</div>
             </div>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Status</th>
+                  <th>תאריך</th>
+                  <th>תיאור</th>
+                  <th>סכום</th>
+                  <th>סטטוס</th>
                 </tr>
               </thead>
               <tbody>

@@ -181,12 +181,12 @@ input::placeholder {
 /* ---- SIDEBAR ---- */
 .sidebar {
   position: fixed;
-  left: 0;
+  right: 0;
   top: 0;
   bottom: 0;
   width: var(--sidebar-width);
   background: var(--color-bg-secondary);
-  border-right: 1px solid var(--color-glass-border);
+  border-left: 1px solid var(--color-glass-border);
   display: flex;
   flex-direction: column;
   z-index: 100;
@@ -311,7 +311,7 @@ input::placeholder {
 /* ---- MAIN CONTENT ---- */
 .main-content {
   flex: 1;
-  margin-left: var(--sidebar-width);
+  margin-right: var(--sidebar-width);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -580,7 +580,7 @@ input::placeholder {
 }
 .data-table th {
   padding: var(--space-3) var(--space-4);
-  text-align: left;
+  text-align: start;
   font-weight: 600;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -893,4 +893,115 @@ input::placeholder {
   .filter-bar select {
     min-width: 100%;
   }
+}
+
+/* =========================================
+   Panel & Modal Components (Slide-In & Popups)
+   ========================================= */
+
+.panel-backdrop, .modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+
+.panel-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slide-panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: 600px;
+  background: var(--color-bg-primary);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+  transform: translateX(-100%);
+  transition: transform var(--transition-normal) cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-panel.open {
+  transform: translateX(0);
+}
+
+.slide-panel-header {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-glass-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-bg-secondary);
+}
+
+.slide-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.modal-content {
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+  max-width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-card {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  border: 1px solid var(--color-glass-border);
+}
+
+.detail-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.detail-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.detail-value {
+  font-weight: 600;
 }

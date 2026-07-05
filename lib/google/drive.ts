@@ -37,6 +37,8 @@ async function getOrCreateFolder(drive: any, folderName: string, parentId?: stri
     q: query,
     fields: 'files(id)',
     spaces: 'drive',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const files = response.data.files || [];
@@ -54,15 +56,16 @@ async function getOrCreateFolder(drive: any, folderName: string, parentId?: stri
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
+    supportsAllDrives: true,
   });
 
   return folder.data.id!;
 }
 
 /**
- * Returns the target folder ID for a given date in "Expense Manager/YYYY/MM" format.
+ * Returns the target folder ID for a given date and status in "Expense Manager/YYYY/MM/status" format.
  */
-async function getTargetFolderId(drive: any, date: Date): Promise<string> {
+async function getTargetFolderId(drive: any, date: Date, status: 'matched' | 'not_matched' | 'error'): Promise<string> {
   const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID; // Optional root folder
   
   // 1. Get or create "Expense Manager" root if rootFolderId is not specified
@@ -79,7 +82,10 @@ async function getTargetFolderId(drive: any, date: Date): Promise<string> {
   const monthStr = (date.getMonth() + 1).toString().padStart(2, '0');
   const monthFolderId = await getOrCreateFolder(drive, monthStr, yearFolderId);
 
-  return monthFolderId;
+  // 4. Get or create status folder ("matched" or "not_matched")
+  const statusFolderId = await getOrCreateFolder(drive, status, monthFolderId);
+
+  return statusFolderId;
 }
 
 /**
@@ -90,12 +96,13 @@ export async function uploadToGoogleDrive(
   fileBuffer: Buffer,
   filename: string,
   mimeType: string,
-  date: Date = new Date()
+  date: Date = new Date(),
+  status: 'matched' | 'not_matched' | 'error' = 'not_matched'
 ): Promise<{ fileId: string; fileUrl: string }> {
   const drive = getDriveClient();
 
-  // Get or create Year/Month folder path
-  const folderId = await getTargetFolderId(drive, date);
+  // Get or create Year/Month/status folder path
+  const targetFolderId = await getTargetFolderId(drive, date, status);
 
   // Convert buffer to stream for the API
   const stream = new Readable();
@@ -104,7 +111,7 @@ export async function uploadToGoogleDrive(
 
   const fileMetadata = {
     name: filename,
-    parents: [folderId],
+    parents: [targetFolderId],
   };
 
   const media = {
@@ -116,6 +123,7 @@ export async function uploadToGoogleDrive(
     requestBody: fileMetadata,
     media: media,
     fields: 'id, webViewLink',
+    supportsAllDrives: true,
   });
 
   const fileId = file.data.id!;
@@ -128,6 +136,7 @@ export async function uploadToGoogleDrive(
         role: 'reader',
         type: 'anyone',
       },
+      supportsAllDrives: true,
     });
   } catch (err) {
     console.warn('Failed to set public read permissions on uploaded file. It may not be previewable in the UI.', err);
@@ -147,5 +156,63 @@ export async function uploadToGoogleDrive(
  */
 export async function deleteFromGoogleDrive(fileId: string): Promise<void> {
   const drive = getDriveClient();
-  await drive.files.delete({ fileId });
+  try {
+    await drive.files.delete({ fileId });
+  } catch (err: any) {
+    console.error(`Failed to delete file from Drive (ID: ${fileId}):`, err);
+  }
 }
+
+/**
+ * Moves an existing Drive file to the target status folder for its date.
+ */
+export async function moveInvoiceDriveStatus(
+  fileId: string, 
+  date: Date, 
+  newStatus: 'matched' | 'not_matched' | 'error'
+): Promise<void> {
+  const drive = getDriveClient();
+  try {
+    // 1. Get the current parents of the file
+    const file = await drive.files.get({
+      fileId: fileId,
+      fields: 'parents'
+    });
+    const previousParents = file.data.parents?.join(',') || '';
+
+    // 2. Get target folder for the new status
+    const targetFolderId = await getTargetFolderId(drive, date, newStatus);
+
+    // 3. Move the file
+    await drive.files.update({
+      fileId: fileId,
+      addParents: targetFolderId,
+      removeParents: previousParents,
+      fields: 'id, parents'
+    });
+    console.log(`Successfully moved Drive file ${fileId} to ${newStatus}`);
+  } catch (err: any) {
+    console.error(`Failed to move Drive file ${fileId} to ${newStatus}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Renames an existing file in Google Drive.
+ */
+export async function renameGoogleDriveFile(fileId: string, newName: string): Promise<void> {
+  const drive = getDriveClient();
+  try {
+    await drive.files.update({
+      fileId,
+      requestBody: {
+        name: newName,
+      },
+    });
+    console.log(`Successfully renamed Drive file ${fileId} to ${newName}`);
+  } catch (err: any) {
+    console.error(`Failed to rename Drive file ${fileId} to ${newName}:`, err);
+    throw err;
+  }
+}
+

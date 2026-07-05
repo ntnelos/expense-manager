@@ -11,19 +11,19 @@ interface NavItem {
 }
 
 const mainNav: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: '📊' },
-  { label: 'Invoices', href: '/invoices', icon: '🧾' },
-  { label: 'Expense Lines', href: '/expense-lines', icon: '🏦' },
-  { label: 'Matching Arena', href: '/matching', icon: '🏟️' },
+  { label: 'לוח בקרה', href: '/', icon: '📊' },
+  { label: 'חשבוניות', href: '/invoices', icon: '🧾' },
+  { label: 'שורות הוצאה', href: '/expense-lines', icon: '🏦' },
+  { label: 'זירת התאמות', href: '/matching', icon: '🏟️' },
 ];
 
 const toolsNav: NavItem[] = [
-  { label: 'Import Bank Data', href: '/import', icon: '📥' },
-  { label: 'Upload Invoice', href: '/invoices/upload', icon: '📤' },
+  { label: 'ייבוא נתוני בנק', href: '/import', icon: '📥' },
+  { label: 'העלאת חשבונית', href: '/invoices/upload', icon: '📤' },
 ];
 
 const settingsNav: NavItem[] = [
-  { label: 'Settings', href: '/settings', icon: '⚙️' },
+  { label: 'הגדרות', href: '/settings', icon: '⚙️' },
 ];
 
 export default function Sidebar() {
@@ -39,13 +39,13 @@ export default function Sidebar() {
       <div className="sidebar-header">
         <div className="sidebar-logo">EM</div>
         <div>
-          <div className="sidebar-title">Expense Manager</div>
-          <div className="sidebar-subtitle">Invoice Control</div>
+          <div className="sidebar-title">מנהל הוצאות</div>
+          <div className="sidebar-subtitle">בקרת חשבוניות</div>
         </div>
       </div>
 
       <nav className="sidebar-nav">
-        <div className="sidebar-section-label">Main</div>
+        <div className="sidebar-section-label">ראשי</div>
         {mainNav.map((item) => (
           <Link
             key={item.href}
@@ -60,7 +60,7 @@ export default function Sidebar() {
           </Link>
         ))}
 
-        <div className="sidebar-section-label">Tools</div>
+        <div className="sidebar-section-label">כלים</div>
         {toolsNav.map((item) => (
           <Link
             key={item.href}

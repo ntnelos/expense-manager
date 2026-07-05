@@ -1,18 +1,12 @@
 import PageHeader from '@/components/layout/PageHeader';
+import CsvImporter from '@/components/import/CsvImporter';
 
 export default function ImportPage() {
   return (
     <>
-      <PageHeader title="Import Bank Data" />
-      <div className="page-content">
-        <div className="empty-state">
-          <div className="empty-state-icon">📥</div>
-          <div className="empty-state-title">Bank Data Import</div>
-          <div className="empty-state-text">
-            The CSV/Excel import with interactive column mapping will be built in Milestone 3.
-            Upload bank exports and map columns to the unified schema.
-          </div>
-        </div>
+      <PageHeader title="ייבוא נתוני בנק" />
+      <div className="page-content" style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <CsvImporter />
       </div>
     </>
   );

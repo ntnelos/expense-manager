@@ -1,18 +1,14 @@
+'use client';
+
 import PageHeader from '@/components/layout/PageHeader';
+import CategoryManager from '@/components/settings/CategoryManager';
 
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Settings" />
-      <div className="page-content">
-        <div className="empty-state">
-          <div className="empty-state-icon">⚙️</div>
-          <div className="empty-state-title">Settings</div>
-          <div className="empty-state-text">
-            System settings including email configuration, Telegram bot management,
-            and column mapping presets will be available here.
-          </div>
-        </div>
+      <PageHeader title="הגדרות" />
+      <div className="page-content" style={{ maxWidth: '800px' }}>
+        <CategoryManager />
       </div>
     </>
   );

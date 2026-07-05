@@ -5,6 +5,13 @@ import type { Invoice } from '@/lib/supabase/types';
 import StatusBadge from '../ui/StatusBadge';
 import { formatToIsraeliDate } from '@/lib/utils/dates';
 
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
 interface InvoiceDetailDrawerProps {
   invoice: Invoice | null;
   onClose: () => void;
@@ -13,9 +20,19 @@ interface InvoiceDetailDrawerProps {
 
 export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: InvoiceDetailDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState<Partial<Invoice>>({});
+  const [formData, setFormData] = useState<Partial<Invoice>>({}); 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+
+  // Fetch categories on mount
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((res) => res.json())
+      .then((data) => setCategories(data.categories || []))
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (invoice) {
@@ -28,6 +45,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         document_type: invoice.document_type || 'other',
         ocr_verified: invoice.ocr_verified,
       });
+      setSelectedCategoryId((invoice as any).category_id || '');
       // Small timeout to allow transition
       setTimeout(() => setIsOpen(true), 50);
     } else {
@@ -61,6 +79,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       const payload = {
         id: invoice.id,
         ...formData,
+        category_id: selectedCategoryId || null,
         ocr_verified: verified ? true : formData.ocr_verified,
       };
 
@@ -71,7 +90,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       });
 
       if (!res.ok) {
-        throw new Error('Failed to update invoice data.');
+        throw new Error('שגיאה בעדכון נתוני החשבונית.');
       }
 
       const data = await res.json();
@@ -89,10 +108,11 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             document_type: data.invoice.document_type || 'other',
             ocr_verified: data.invoice.ocr_verified,
           });
+          setSelectedCategoryId(data.invoice.category_id || '');
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred while saving invoice changes.');
+      setError(err.message || 'אירעה שגיאה בעת שמירת השינויים בחשבונית.');
     } finally {
       setSaving(false);
     }
@@ -168,7 +188,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             }}
           >
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              📄 {invoice.original_filename || 'Invoice Document'}
+              📄 {invoice.original_filename || 'מסמך חשבונית'}
             </div>
             <a
               href={invoice.drive_file_url}
@@ -176,7 +196,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
               rel="noopener noreferrer"
               className="btn btn-secondary btn-sm"
             >
-              🔗 Open in Drive
+              🔗 פתח ב-Drive
             </a>
           </div>
 
@@ -209,7 +229,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <span style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>OCR Verification</span>
+              <span style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>אימות נתוני OCR</span>
               <StatusBadge status={invoice.status} />
             </div>
             <button
@@ -337,10 +357,29 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
                   onChange={handleInputChange}
                   style={{ width: '100%' }}
                 >
-                  <option value="tax_invoice">Tax Invoice (חשבונית מס)</option>
-                  <option value="receipt">Receipt (קבלה)</option>
-                  <option value="tax_invoice_receipt">Tax Invoice Receipt (חשבונית מס קבלה)</option>
-                  <option value="other">Other (אחר)</option>
+                  <option value="tax_invoice">חשבונית מס</option>
+                  <option value="receipt">קבלה</option>
+                  <option value="tax_invoice_receipt">חשבונית מס קבלה</option>
+                  <option value="other">אחר</option>
+                </select>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
+                  Category (קטגוריה)
+                </label>
+                <select
+                  value={selectedCategoryId}
+                  onChange={(e) => setSelectedCategoryId(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">ללא קטגוריה</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -359,15 +398,15 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
                 }}
               >
                 <div>
-                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>Ingestion Source</span>
-                  <strong>{invoice.source === 'email' ? '📧 Email' : invoice.source === 'telegram' ? '📱 Telegram' : '📤 Web Upload'}</strong>
+                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>מקור</span>
+                  <strong>{invoice.source === 'email' ? '📧 דוא״ל' : invoice.source === 'telegram' ? '📱 Telegram' : '📤 רשת'}</strong>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>Added On</span>
+                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>תאריך העלאה</span>
                   <strong>{formatToIsraeliDate(invoice.created_at)}</strong>
                 </div>
                 <div style={{ gridColumn: 'span 2', wordBreak: 'break-all' }}>
-                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>Content SHA-256</span>
+                  <span style={{ color: 'var(--color-text-secondary)', display: 'block', fontSize: 'var(--font-size-xs)' }}>מזהה תוכן (SHA-256)</span>
                   <code style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{invoice.content_hash}</code>
                 </div>
               </div>
@@ -389,13 +428,13 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             }}
           >
             <button className="btn btn-secondary" onClick={handleClose} disabled={saving}>
-              Cancel
+              ביטול
             </button>
             <button className="btn btn-secondary" onClick={() => handleSave(false)} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Draft'}
+              {saving ? 'שומר...' : 'שמור טיוטה'}
             </button>
             <button className="btn btn-primary" onClick={() => handleSave(true)} disabled={saving}>
-              {saving ? 'Verifying...' : 'Verify & Approve OCR ✅'}
+              {saving ? 'מאמת...' : 'אמת ואשר OCR ✅'}
             </button>
           </div>
         </div>

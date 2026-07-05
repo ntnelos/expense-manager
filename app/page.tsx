@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
 import SummaryCards from '@/components/dashboard/SummaryCards';
 import RecentActivity from '@/components/dashboard/RecentActivity';
+import CategoryChart from '@/components/dashboard/CategoryChart';
 import type { DashboardStats, Invoice, ExpenseLine } from '@/lib/supabase/types';
 import Link from 'next/link';
 
@@ -52,12 +53,12 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard">
+      <PageHeader title="לוח בקרה">
         <Link href="/invoices/upload" className="btn btn-primary">
-          📤 Upload Invoice
+          📤 העלאת חשבונית
         </Link>
         <Link href="/import" className="btn btn-secondary">
-          📥 Import Bank Data
+          📥 ייבוא נתוני בנק
         </Link>
       </PageHeader>
 
@@ -65,26 +66,29 @@ export default function DashboardPage() {
         {/* Summary Cards */}
         <SummaryCards stats={stats} loading={loading} />
 
+        {/* Category Chart */}
+        <CategoryChart />
+
         {/* Quick Actions */}
         <div className="card animate-in" style={{ marginBottom: 'var(--space-8)' }}>
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
             <div>
               <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
-                Quick Actions
+                פעולות מהירות
               </h3>
               <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                Jump to common tasks
+                גש למשימות נפוצות במהירות
               </p>
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
               <Link href="/matching" className="btn btn-primary btn-lg">
-                🏟️ Open Matching Arena
+                🏟️ פתח את זירת ההתאמות
               </Link>
               <Link href="/invoices" className="btn btn-secondary btn-lg">
-                🧾 View All Invoices
+                🧾 צפה בכל החשבוניות
               </Link>
               <Link href="/expense-lines" className="btn btn-secondary btn-lg">
-                🏦 View Expense Lines
+                🏦 צפה בשורות ההוצאה
               </Link>
             </div>
           </div>
@@ -92,7 +96,7 @@ export default function DashboardPage() {
 
         {/* Recent Activity */}
         <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>
-          Recent Activity
+          פעילות אחרונה
         </h2>
         <RecentActivity
           invoices={recentInvoices}

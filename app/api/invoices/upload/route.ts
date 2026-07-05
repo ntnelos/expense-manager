@@ -45,41 +45,132 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Upload to Google Drive
-    const uploadResult = await uploadToGoogleDrive(
-      buffer,
-      file.name,
-      file.type,
-      new Date()
-    );
-    uploadedFileId = uploadResult.fileId;
+    // 3. Run OCR extraction based on file type
+    let ocrResult: any;
+    let hasOcrError = false;
+    let ocrErrorMessage = '';
 
-    // 4. Run OCR extraction based on file type
-    let ocrResult;
-    if (file.type === 'application/pdf') {
-      ocrResult = await extractInvoiceFromPDF(buffer);
-    } else if (file.type.startsWith('image/')) {
-      ocrResult = await extractInvoiceFromImage(buffer, file.type);
-    } else {
-      // Clean up Drive file before returning error
-      await deleteFromGoogleDrive(uploadedFileId);
-      return NextResponse.json(
-        { error: 'Unsupported file type. Only PDF and image files are supported.' },
-        { status: 400 }
-      );
+    try {
+      if (file.type === 'application/pdf') {
+        ocrResult = await extractInvoiceFromPDF(buffer);
+      } else if (file.type.startsWith('image/')) {
+        ocrResult = await extractInvoiceFromImage(buffer, file.type);
+      } else {
+        return NextResponse.json(
+          { error: 'Unsupported file type for OCR.' },
+          { status: 400 }
+        );
+      }
+    } catch (err: any) {
+      console.error('OCR Extraction failed:', err);
+      hasOcrError = true;
+      ocrErrorMessage = err.message || 'Unknown OCR error';
+      // Provide fallback data so upload flow can continue
+      ocrResult = {
+        supplier_name: 'חשבונית לא מזוהה', // Unidentified Invoice
+        supplier_tax_id: null,
+        invoice_number: null,
+        invoice_date: null,
+        currency: 'ILS',
+        total_amount: null,
+        vat_amount: null,
+        document_type: 'other',
+        is_credit_note: false,
+        suggested_category: null
+      };
     }
 
-    // 5. Handle credit notes (ignore and delete from Drive)
-    if (ocrResult.is_credit_note) {
-      await deleteFromGoogleDrive(uploadedFileId);
+    // 3.5 Handle Foreign Currency Conversion
+    let finalTotalAmount = ocrResult.total_amount;
+    let originalAmount = null;
+    let invoiceCurrency = ocrResult.currency || 'ILS';
+    
+    if (invoiceCurrency !== 'ILS' && ocrResult.total_amount && ocrResult.invoice_date) {
+      try {
+        const response = await fetch(`https://api.frankfurter.dev/v1/${ocrResult.invoice_date}?base=${invoiceCurrency}&symbols=ILS`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.rates && data.rates.ILS) {
+            originalAmount = ocrResult.total_amount;
+            finalTotalAmount = Math.round(originalAmount * data.rates.ILS * 100) / 100;
+          }
+        } else {
+          // Fallback to latest if historical fails
+          const latestResponse = await fetch(`https://api.frankfurter.dev/v1/latest?base=${invoiceCurrency}&symbols=ILS`);
+          if (latestResponse.ok) {
+            const data = await latestResponse.json();
+            if (data.rates && data.rates.ILS) {
+              originalAmount = ocrResult.total_amount;
+              finalTotalAmount = Math.round(originalAmount * data.rates.ILS * 100) / 100;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch exchange rate:', err);
+      }
+    }
+
+    // 4. Handle credit notes (ignore completely if AI detected it, and no error occurred)
+    if (!hasOcrError && ocrResult.is_credit_note) {
       return NextResponse.json(
         {
           message: 'Credit note/refund document detected and skipped.',
           code: 'CREDIT_NOTE_IGNORED',
           ocr: ocrResult,
         },
-        { status: 200 } // Status 200 is fine as it's a successful ignore workflow
+        { status: 200 }
       );
+    }
+    // 5. Upload file to Google Drive with smart renaming
+    const extension = file.name.split('.').pop() || 'pdf';
+    const supplier = hasOcrError ? 'Unidentified' : (ocrResult.supplier_name ? ocrResult.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown');
+    const invoiceDate = ocrResult.invoice_date || new Date().toISOString().split('T')[0];
+    const newFilename = `${supplier} - ${invoiceDate}.${extension}`;
+
+    let uploadResult: { fileId: string; fileUrl: string };
+    try {
+      const driveStatus = hasOcrError ? 'error' : 'not_matched';
+      const driveDate = ocrResult.invoice_date ? new Date(ocrResult.invoice_date) : new Date();
+      uploadResult = await uploadToGoogleDrive(buffer, newFilename, file.type, driveDate, driveStatus);
+      uploadedFileId = uploadResult.fileId;
+    } catch (uploadError) {
+      throw new Error('Failed to upload to Google Drive: ' + (uploadError as Error).message);
+    }
+
+    // 5.5 Auto-assign category based on AI suggestion
+    let categoryId: string | null = null;
+    if (ocrResult.suggested_category) {
+      const { data: matchedCategory } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('name', ocrResult.suggested_category)
+        .maybeSingle();
+      
+      if (matchedCategory) {
+        categoryId = matchedCategory.id;
+      }
+    }
+
+    // 5.8 Semantic Duplicate Check (By Supplier + Invoice Number)
+    if (!hasOcrError && ocrResult.supplier_name && ocrResult.invoice_number) {
+      const { data: semanticDuplicate } = await supabase
+        .from('invoices')
+        .select('id, supplier_name, invoice_number, invoice_date, total_amount')
+        .eq('supplier_name', ocrResult.supplier_name)
+        .eq('invoice_number', ocrResult.invoice_number)
+        .maybeSingle();
+
+      if (semanticDuplicate) {
+        if (uploadedFileId) await deleteFromGoogleDrive(uploadedFileId);
+        return NextResponse.json(
+          {
+            error: 'Duplicate invoice detected (same supplier and invoice number).',
+            code: 'DUPLICATE_INVOICE',
+            invoice: semanticDuplicate,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // 6. Save invoice metadata to Supabase DB
@@ -93,12 +184,16 @@ export async function POST(request: Request) {
         source: source,
         supplier_name: ocrResult.supplier_name,
         supplier_tax_id: ocrResult.supplier_tax_id,
+        invoice_number: ocrResult.invoice_number,
         invoice_date: ocrResult.invoice_date,
-        total_amount: ocrResult.total_amount,
+        currency: invoiceCurrency,
+        original_amount: originalAmount,
+        total_amount: finalTotalAmount,
         vat_amount: ocrResult.vat_amount,
         document_type: ocrResult.document_type,
-        status: 'new',
-        raw_ocr_data: ocrResult as any,
+        category_id: categoryId,
+        status: hasOcrError ? 'error' : 'new',
+        raw_ocr_data: hasOcrError ? { error: ocrErrorMessage } : (ocrResult as any),
         ocr_verified: false,
       })
       .select()
@@ -106,17 +201,18 @@ export async function POST(request: Request) {
 
     if (insertError) {
       console.error('Error inserting invoice into Supabase:', insertError);
-      // Clean up Drive file
-      await deleteFromGoogleDrive(uploadedFileId);
+      if (uploadedFileId) await deleteFromGoogleDrive(uploadedFileId); // Rollback
       return NextResponse.json(
-        { error: 'Failed to save invoice record in database.' },
+        { error: 'Failed to save invoice record in database.', details: insertError },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
+      message: hasOcrError ? 'Invoice saved with missing details (OCR failed).' : 'Invoice uploaded successfully',
       invoice: newInvoice,
+      isUnidentified: hasOcrError
     });
   } catch (error: any) {
     console.error('Invoice upload/processing error:', error);
@@ -130,8 +226,13 @@ export async function POST(request: Request) {
       }
     }
 
+    let errorMessage = error.message || 'An error occurred during file upload and OCR processing.';
+    if (errorMessage.includes('fetch failed') || errorMessage.includes('ETIMEDOUT') || errorMessage.includes('timeout')) {
+      errorMessage = 'החיבור לשרת ה-AI התנתק או לקח זמן רב מדי. אנא נסה להעלות שוב.';
+    }
+
     return NextResponse.json(
-      { error: error.message || 'An error occurred during file upload and OCR processing.' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

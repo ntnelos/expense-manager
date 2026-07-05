@@ -6,6 +6,13 @@ import StatusBadge from '../ui/StatusBadge';
 import { formatToIsraeliDate } from '@/lib/utils/dates';
 import InvoiceDetailDrawer from './InvoiceDetailDrawer';
 
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
   return new Intl.NumberFormat('he-IL', {
@@ -29,9 +36,21 @@ export default function InvoiceGrid() {
   const [dateTo, setDateTo] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+
+  // Categories
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Selected Invoice for Drawer
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((res) => res.json())
+      .then((data) => setCategories(data.categories || []))
+      .catch(console.error);
+  }, []);
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
@@ -45,11 +64,12 @@ export default function InvoiceGrid() {
         dateTo,
         minAmount,
         maxAmount,
+        categoryId,
       });
 
       const res = await fetch(`/api/invoices?${queryParams.toString()}`);
       if (!res.ok) {
-        throw new Error('Failed to fetch invoices list.');
+        throw new Error('שגיאה בטעינת רשימת החשבוניות.');
       }
       const data = await res.json();
       setInvoices(data.invoices || []);
@@ -60,7 +80,7 @@ export default function InvoiceGrid() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount]);
+  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount, categoryId]);
 
   useEffect(() => {
     // Debounce search filter updates to prevent hitting the API on every keystroke
@@ -88,7 +108,7 @@ export default function InvoiceGrid() {
 
   const handleDeleteClick = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Avoid opening drawer on delete action
-    if (!confirm('Are you sure you want to delete this invoice? The associated file in Google Drive will also be removed.')) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק חשבונית זו? הקובץ המקושר ב-Google Drive יימחק גם הוא.')) {
       return;
     }
 
@@ -98,7 +118,7 @@ export default function InvoiceGrid() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to delete invoice.');
+        throw new Error('שגיאה במחיקת החשבונית.');
       }
 
       const data = await res.json();
@@ -111,7 +131,7 @@ export default function InvoiceGrid() {
       }
     } catch (err) {
       console.error('Delete invoice error:', err);
-      alert('Failed to delete invoice document.');
+      alert('שגיאה במחיקת מסמך החשבונית.');
     }
   };
 
@@ -124,7 +144,7 @@ export default function InvoiceGrid() {
             {/* Search Input */}
             <input
               type="text"
-              placeholder="Search by supplier name, tax ID..."
+              placeholder="חיפוש לפי שם ספק, ח.פ..."
               className="search-input"
               value={search}
               onChange={(e) => {
@@ -142,18 +162,18 @@ export default function InvoiceGrid() {
                 setPage(1);
               }}
             >
-              <option value="">All Statuses</option>
-              <option value="new">New</option>
-              <option value="partially_matched">Partial Match</option>
-              <option value="fully_matched">Fully Matched</option>
-              <option value="processing">Processing</option>
-              <option value="error">Error</option>
+              <option value="">כל הסטטוסים</option>
+              <option value="new">חדש</option>
+              <option value="partially_matched">התאמה חלקית</option>
+              <option value="fully_matched">הותאם במלואו</option>
+              <option value="processing">בעיבוד</option>
+              <option value="error">שגיאה</option>
             </select>
 
             {/* Date From */}
             <input
               type="date"
-              placeholder="Date From"
+              placeholder="מתאריך"
               value={dateFrom}
               onChange={(e) => {
                 setDateFrom(e.target.value);
@@ -164,7 +184,7 @@ export default function InvoiceGrid() {
             {/* Date To */}
             <input
               type="date"
-              placeholder="Date To"
+              placeholder="עד תאריך"
               value={dateTo}
               onChange={(e) => {
                 setDateTo(e.target.value);
@@ -175,7 +195,7 @@ export default function InvoiceGrid() {
             {/* Min Amount */}
             <input
               type="number"
-              placeholder="Min Amount (₪)"
+              placeholder="סכום מינימום (₪)"
               value={minAmount}
               onChange={(e) => {
                 setMinAmount(e.target.value);
@@ -187,7 +207,7 @@ export default function InvoiceGrid() {
             {/* Max Amount */}
             <input
               type="number"
-              placeholder="Max Amount (₪)"
+              placeholder="סכום מקסימום (₪)"
               value={maxAmount}
               onChange={(e) => {
                 setMaxAmount(e.target.value);
@@ -196,8 +216,24 @@ export default function InvoiceGrid() {
               style={{ maxWidth: '130px' }}
             />
 
+            {/* Category Filter */}
+            <select
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">כל הקטגוריות</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.name}
+                </option>
+              ))}
+            </select>
+
             {/* Reset Button */}
-            {(search || status || dateFrom || dateTo || minAmount || maxAmount) && (
+            {(search || status || dateFrom || dateTo || minAmount || maxAmount || categoryId) && (
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
@@ -207,10 +243,11 @@ export default function InvoiceGrid() {
                   setDateTo('');
                   setMinAmount('');
                   setMaxAmount('');
+                  setCategoryId('');
                   setPage(1);
                 }}
               >
-                Clear
+                נקה
               </button>
             )}
           </div>
@@ -228,25 +265,26 @@ export default function InvoiceGrid() {
         ) : invoices.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">🧾</div>
-            <div className="empty-state-title">No invoices found</div>
+            <div className="empty-state-title">לא נמצאו חשבוניות</div>
             <div className="empty-state-text">
-              Try adjusting your search query or filters, or upload a new invoice.
+              נסה לשנות את סינון החיפוש או העלה חשבונית חדשה.
             </div>
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Source</th>
-                <th>Supplier Name</th>
-                <th>Tax ID</th>
-                <th>Invoice Date</th>
-                <th>Total Amount</th>
-                <th>VAT Amount</th>
-                <th>Matched</th>
-                <th>Status</th>
-                <th>Verified</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                <th>מקור</th>
+                <th>שם ספק</th>
+                <th>ח.פ/ע.מ</th>
+                <th>תאריך חשבונית</th>
+                <th>סכום כולל</th>
+                <th>מע״מ</th>
+                <th>קטגוריה</th>
+                <th>הותאם</th>
+                <th>סטטוס</th>
+                <th>מאומת</th>
+                <th style={{ textAlign: 'left' }}>פעולות</th>
               </tr>
             </thead>
             <tbody>
@@ -267,6 +305,27 @@ export default function InvoiceGrid() {
                   <td className="table-amount" style={{ color: 'var(--color-text-secondary)' }}>
                     {formatCurrency(inv.vat_amount)}
                   </td>
+                  <td>
+                    {(inv as any).categories ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 10px',
+                        borderRadius: 'var(--radius-full)',
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 600,
+                        background: `${(inv as any).categories.color}20`,
+                        color: (inv as any).categories.color,
+                        border: `1px solid ${(inv as any).categories.color}40`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {(inv as any).categories.icon} {(inv as any).categories.name}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>—</span>
+                    )}
+                  </td>
                   <td className="table-amount" style={{ color: 'var(--color-success)' }}>
                     {formatCurrency(inv.matched_amount)}
                   </td>
@@ -275,16 +334,16 @@ export default function InvoiceGrid() {
                   </td>
                   <td>
                     {inv.ocr_verified ? (
-                      <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>✅ Yes</span>
+                      <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>✅ כן</span>
                     ) : (
-                      <span style={{ color: 'var(--color-warning)', fontWeight: 500 }}>⏳ Draft</span>
+                      <span style={{ color: 'var(--color-warning)', fontWeight: 500 }}>⏳ טיוטה</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td style={{ textAlign: 'left' }}>
                     <button
                       className="btn btn-ghost btn-icon"
                       onClick={(e) => handleDeleteClick(e, inv.id)}
-                      title="Delete Invoice"
+                      title="מחק חשבונית"
                     >
                       🗑️
                     </button>
@@ -308,7 +367,7 @@ export default function InvoiceGrid() {
           }}
         >
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-            Showing <strong>{invoices.length}</strong> of <strong>{totalCount}</strong> invoices
+            מציג <strong>{invoices.length}</strong> מתוך <strong>{totalCount}</strong> חשבוניות
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
             <button
@@ -316,17 +375,17 @@ export default function InvoiceGrid() {
               disabled={page === 1}
               onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
             >
-              Previous
+              הקודם
             </button>
             <span style={{ alignSelf: 'center', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              עמוד <strong>{page}</strong> מתוך <strong>{totalPages}</strong>
             </span>
             <button
               className="btn btn-secondary btn-sm"
               disabled={page === totalPages}
               onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
             >
-              Next
+              הבא
             </button>
           </div>
         </div>

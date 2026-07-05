@@ -11,7 +11,10 @@ export interface Invoice {
   source: 'email' | 'telegram' | 'manual_upload';
   supplier_name: string | null;
   supplier_tax_id: string | null;
+  invoice_number: string | null;
   invoice_date: string | null; // ISO date string
+  currency: string | null;
+  original_amount: number | null;
   total_amount: number | null;
   vat_amount: number | null;
   matched_amount: number;
@@ -29,10 +32,14 @@ export interface ExpenseLine {
   transaction_date: string; // ISO date string
   charge_date: string | null;
   amount: number;
+  total_amount: number | null;
+  installment_current: number | null;
+  installment_total: number | null;
   description: string | null;
   card_last_digits: string | null;
   source_identifier: string | null;
   original_category: string | null;
+  currency: string;
   status: 'unapproved' | 'approved' | 'approved_no_invoice';
   approval_note: string | null;
   source_file: string | null;

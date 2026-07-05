@@ -14,17 +14,22 @@ export async function GET(request: Request) {
     const dateTo = searchParams.get('dateTo') || '';
     const minAmount = searchParams.get('minAmount') || '';
     const maxAmount = searchParams.get('maxAmount') || '';
+    const categoryId = searchParams.get('categoryId') || '';
 
     const offset = (page - 1) * limit;
     const supabase = createServerClient();
 
     let query = supabase
       .from('invoices')
-      .select('*', { count: 'exact' });
+      .select('*, categories(id, name, icon, color)', { count: 'exact' });
 
     // Apply Filters
     if (status) {
-      query = query.eq('status', status);
+      if (status.includes(',')) {
+        query = query.in('status', status.split(','));
+      } else {
+        query = query.eq('status', status);
+      }
     }
     
     if (search) {
@@ -45,6 +50,10 @@ export async function GET(request: Request) {
 
     if (maxAmount) {
       query = query.lte('total_amount', parseFloat(maxAmount));
+    }
+
+    if (categoryId) {
+      query = query.eq('category_id', categoryId);
     }
 
     // Sort by newest created first
@@ -95,6 +104,7 @@ export async function PATCH(request: Request) {
       'document_type',
       'status',
       'ocr_verified',
+      'category_id',
     ];
 
     for (const key of allowedKeys) {

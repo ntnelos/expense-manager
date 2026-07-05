@@ -5,9 +5,9 @@ import Link from 'next/link';
 export default function InvoicesPage() {
   return (
     <>
-      <PageHeader title="Invoices">
+      <PageHeader title="חשבוניות">
         <Link href="/invoices/upload" className="btn btn-primary">
-          📤 Upload Invoice
+          📤 העלאת חשבונית
         </Link>
       </PageHeader>
       

@@ -1,26 +1,20 @@
 import PageHeader from '@/components/layout/PageHeader';
 import Link from 'next/link';
+import ExpenseLineGrid from '@/components/expense-lines/ExpenseLineGrid';
 
 export default function ExpenseLinesPage() {
   return (
     <>
-      <PageHeader title="Expense Lines">
+      <PageHeader title="שורות הוצאה">
+        <a href="/api/export" className="btn btn-secondary" target="_blank" rel="noopener noreferrer">
+          📊 ייצוא לרואה חשבון
+        </a>
         <Link href="/import" className="btn btn-primary">
-          📥 Import Bank Data
+          📥 ייבוא נתוני בנק
         </Link>
       </PageHeader>
       <div className="page-content">
-        <div className="empty-state">
-          <div className="empty-state-icon">🏦</div>
-          <div className="empty-state-title">Expense Lines Grid</div>
-          <div className="empty-state-text">
-            The expense lines grid with filtering and approval actions will be built in Milestone 3.
-            Import a bank CSV/Excel file to see transactions here.
-          </div>
-          <Link href="/import" className="btn btn-primary" style={{ marginTop: 'var(--space-6)' }}>
-            📥 Import Your First File
-          </Link>
-        </div>
+        <ExpenseLineGrid />
       </div>
     </>
   );
