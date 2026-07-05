@@ -23,6 +23,7 @@ export default function MatchingArena() {
   const [loading, setLoading] = useState(true);
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [matchingLineId, setMatchingLineId] = useState<string | null>(null);
   
   // Sorting state
@@ -122,6 +123,22 @@ export default function MatchingArena() {
       }
     }
     setShowAutoMatch(false);
+  };
+
+  const handleDeleteLine = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('האם אתה בטוח שברצונך למחוק שורת הוצאה זו?')) return;
+    
+    try {
+      const res = await fetch(`/api/expense-lines/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete expense line');
+      
+      setLines(prev => prev.filter(l => l.id !== id));
+      alert('שורת ההוצאה נמחקה בהצלחה.');
+    } catch (error) {
+      console.error(error);
+      alert('שגיאה במחיקת השורה.');
+    }
   };
 
   // Generate Auto-Match Proposals (Score >= 70)
@@ -295,13 +312,22 @@ export default function MatchingArena() {
                     <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                   </div>
-                  <button 
-                    className="btn btn-primary btn-sm" 
-                    onClick={() => handleManualMatch(line)}
-                    disabled={matchingLineId === line.id}
-                  >
-                    {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      onClick={() => handleManualMatch(line)}
+                      disabled={matchingLineId === line.id}
+                    >
+                      {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
+                    </button>
+                    <button 
+                      onClick={(e) => handleDeleteLine(line.id, e)}
+                      title="מחק שורה"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (
@@ -317,16 +343,27 @@ export default function MatchingArena() {
                     opacity: 0.7
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>
-                    {formatCurrency(line.amount)}
-                    {line.total_amount && line.total_amount !== line.amount && (
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
-                        (מתוך {formatCurrency(line.total_amount)})
-                      </span>
-                    )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>
+                        {formatCurrency(line.amount)}
+                        {line.total_amount && line.total_amount !== line.amount && (
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
+                            (מתוך {formatCurrency(line.total_amount)})
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
+                    </div>
+                    <button 
+                      onClick={(e) => handleDeleteLine(line.id, e)}
+                      title="מחק שורה"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
+                    >
+                      🗑️
+                    </button>
                   </div>
-                  <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                 </div>
               ))
             )}
@@ -356,7 +393,7 @@ export default function MatchingArena() {
               sortedInvoices.map((inv) => (
                 <div 
                   key={inv.id} 
-                  onClick={() => setSelectedInvoice(inv)}
+                  onClick={() => setSelectedInvoice(prev => prev?.id === inv.id ? null : inv)}
                   style={{ 
                     padding: 'var(--space-3)', 
                     background: selectedInvoice?.id === inv.id ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)', 
@@ -376,7 +413,13 @@ export default function MatchingArena() {
                   </div>
                   <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                     {inv.status === 'error' && <span title="חשבונית לא מזוהה" style={{ color: 'var(--color-warning)' }}>⚠️</span>}
-                    {inv.supplier_name || 'ספק לא ידוע'}
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setViewingInvoice(inv); }}
+                      style={{ textDecoration: 'underline', cursor: 'pointer' }}
+                      title="לחץ לצפייה ועריכת פרטי החשבונית"
+                    >
+                      {inv.supplier_name || 'ספק לא ידוע'}
+                    </span>
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(inv.invoice_date)}</div>
                 </div>
@@ -387,8 +430,8 @@ export default function MatchingArena() {
       </div>
 
       <InvoiceDetailPanel 
-        invoice={selectedInvoice} 
-        onClose={() => setSelectedInvoice(null)} 
+        invoice={viewingInvoice} 
+        onClose={() => setViewingInvoice(null)} 
         onSaved={fetchUnmatchedData}
       />
 
