@@ -28,7 +28,7 @@ function parseHTMLTable(html: string): { headers: string[]; rows: string[][]; me
     })
     .filter(row => row.length > 0); // remove rows with no cells
 
-  if (allRows.length === 0) return { headers: [], rows: [] };
+  if (allRows.length === 0) return { headers: [], rows: [], metadata: {} };
 
   // Find the header row: the row with the most non-empty cells
   // within the first 40 rows (to handle banks that have lots of metadata)
