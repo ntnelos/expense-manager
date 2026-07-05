@@ -133,7 +133,7 @@ export default function MatchingArena() {
       const res = await fetch(`/api/expense-lines/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete expense line');
       
-      setLines(prev => prev.filter(l => l.id !== id));
+      setExpenseLines(prev => prev.filter(l => l.id !== id));
       alert('שורת ההוצאה נמחקה בהצלחה.');
     } catch (error) {
       console.error(error);
