@@ -69,6 +69,10 @@ export async function POST(req: Request) {
     await sendMessage(chatId, `הקובץ התקבל, מפענח נתונים (AI)... ⏳`);
 
     // 4. Download file from Telegram
+    if (!fileIdToDownload) {
+      await sendMessage(chatId, `❌ שגיאה לא ידועה במציאת הקובץ.`);
+      return NextResponse.json({ success: true });
+    }
     const fileMeta = await getFile(fileIdToDownload);
     if (!fileMeta || !fileMeta.file_path) {
       await sendMessage(chatId, `❌ שגיאה בהורדת הקובץ מטלגרם.`);
