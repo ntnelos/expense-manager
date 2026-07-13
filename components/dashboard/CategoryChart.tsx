@@ -13,7 +13,7 @@ export default function CategoryChart() {
     fetch('/api/dashboard/categories')
       .then(res => res.json())
       .then(data => {
-        setData(data || []);
+        setData(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
