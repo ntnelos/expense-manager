@@ -14,6 +14,7 @@ interface FieldMap {
   card_last_digits: string;
   original_category: string;
   source_identifier: string;
+  details: string;
 }
 
 const DEFAULT_MAP: FieldMap = {
@@ -25,6 +26,7 @@ const DEFAULT_MAP: FieldMap = {
   card_last_digits: '',
   original_category: '',
   source_identifier: '',
+  details: '',
 };
 
 interface ColumnMapping {
@@ -205,11 +207,13 @@ export default function CsvImporter() {
       };
 
       const description = getVal(fieldMap.description);
+      const details = fieldMap.details !== '' ? getVal(fieldMap.details) : '';
+      const searchTarget = `${description} ${details}`;
       
-      // Parse installments from description (e.g., "עסקה בתשלומים תשלום - 1 מ - 3")
+      // Parse installments from description or details (e.g., "עסקה בתשלומים תשלום - 1 מ - 3")
       let installment_current = null;
       let installment_total = null;
-      const instMatch = description.match(/תשלום\s*-\s*(\d+)\s*מ\s*-\s*(\d+)/i) || description.match(/תשלום\s+(\d+)\s+מתוך\s+(\d+)/i);
+      const instMatch = searchTarget.match(/תשלום\s*-\s*(\d+)\s*מ\s*-\s*(\d+)/i) || searchTarget.match(/תשלום\s+(\d+)\s+מתוך\s+(\d+)/i);
       if (instMatch) {
         installment_current = parseInt(instMatch[1], 10);
         installment_total = parseInt(instMatch[2], 10);
@@ -245,13 +249,15 @@ export default function CsvImporter() {
     console.log('[Import Debug] Raw Mapped Rows (first 3):', rawMapped.slice(0, 3));
     
     // Only import rows that have a valid parsed YYYY-MM-DD date and a valid number amount.
+    // Also, skip installments > 1 per user request.
     const data = rawMapped.filter(row => 
       row.transaction_date && 
       row.transaction_date.match(/^\d{4}-\d{2}-\d{2}$/) && 
       row.amount !== null && 
-      !isNaN(row.amount as number)
+      !isNaN(row.amount as number) &&
+      (row.installment_current === null || row.installment_current <= 1)
     );
-    console.log('[Import Debug] Filtered Rows Length:', data.length);
+    console.log('[Import Debug] Filtered Rows Length (skipped bad dates & future installments):', data.length);
     
     if (data.length === 0) {
       alert('אין נתונים תקינים לייבוא. וודא שמיפית תאריך וסכום בצורה נכונה.');
@@ -362,8 +368,9 @@ export default function CsvImporter() {
               { key: 'description', label: 'תיאור / בית עסק' },
               { key: 'charge_date', label: 'תאריך חיוב (בעמודה)' },
               { key: 'card_last_digits', label: '4 ספרות כרטיס' },
-              { key: 'original_category', label: 'ענף / קטגוריה בנקאית' },
-              { key: 'source_identifier', label: 'מספר אסמכתא' },
+              { key: 'original_category', label: 'קטגוריה מקורית' },
+              { key: 'details', label: 'פרטים (עבור זיהוי תשלומים)' },
+              { key: 'source_identifier', label: 'מזהה בנק (רשות)' },
             ].map((field) => (
               <div key={field.key}>
                 <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-1)' }}>
