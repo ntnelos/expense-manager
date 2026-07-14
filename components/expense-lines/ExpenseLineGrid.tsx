@@ -5,6 +5,7 @@ import type { ExpenseLine } from '@/lib/supabase/types';
 import { formatToIsraeliDate } from '@/lib/utils/dates';
 import Link from 'next/link';
 import ExpenseLineModal from './ExpenseLineModal';
+import DeleteExpenseModal from './DeleteExpenseModal';
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
@@ -61,6 +62,7 @@ export default function ExpenseLineGrid() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<ExpenseLine | null>(null);
+  const [deletingLine, setDeletingLine] = useState<ExpenseLine | null>(null);
 
   const fetchLines = useCallback(async () => {
     setLoading(true);
@@ -133,15 +135,26 @@ export default function ExpenseLineGrid() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק שורה זו?')) return;
+  const handleConfirmDelete = async (ignoreFuture: boolean) => {
+    if (!deletingLine) return;
+
     try {
-      const res = await fetch(`/api/expense-lines?id=${id}`, { method: 'DELETE' });
+      if (ignoreFuture && deletingLine.description) {
+        await fetch('/api/ignored-expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: deletingLine.description })
+        });
+      }
+
+      const res = await fetch(`/api/expense-lines?id=${deletingLine.id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchLines();
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setDeletingLine(null);
     }
   };
 
@@ -158,34 +171,8 @@ export default function ExpenseLineGrid() {
         </div>
       </div>
       
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 'var(--space-4)', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--space-4)' }}>
-        <button 
-          onClick={() => { setStatus('unapproved'); setPage(1); }}
-          style={{ 
-            background: 'none', border: 'none', padding: 'var(--space-2) var(--space-4)', fontSize: 'var(--font-size-base)', fontWeight: status === 'unapproved' ? 600 : 400,
-            color: status === 'unapproved' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-            borderBottom: status === 'unapproved' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            cursor: 'pointer'
-          }}
-        >
-          ממתינות להתאמה
-        </button>
-        <button 
-          onClick={() => { setStatus('matched'); setPage(1); }}
-          style={{ 
-            background: 'none', border: 'none', padding: 'var(--space-2) var(--space-4)', fontSize: 'var(--font-size-base)', fontWeight: status === 'matched' ? 600 : 400,
-            color: status === 'matched' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-            borderBottom: status === 'matched' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            cursor: 'pointer'
-          }}
-        >
-          שהותאמו
-        </button>
-      </div>
-      
       {/* Filter Bar */}
-      <div className="card animate-in" style={{ marginBottom: 'var(--space-6)' }}>
+      <div className="card animate-in" style={{ marginBottom: 'var(--space-4)' }}>
         <div className="card-body" style={{ padding: 'var(--space-4)' }}>
           <div className="filter-bar">
             <input
@@ -219,6 +206,55 @@ export default function ExpenseLineGrid() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '4px', 
+        borderBottom: '1px solid var(--color-border)', 
+        marginBottom: 'var(--space-4)',
+        paddingLeft: 'var(--space-4)',
+        paddingRight: 'var(--space-4)'
+      }}>
+        <button 
+          onClick={() => { setStatus('unapproved'); setPage(1); }}
+          style={{ 
+            background: status === 'unapproved' ? 'var(--color-bg-primary)' : 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-border)',
+            borderBottom: status === 'unapproved' ? '1px solid var(--color-bg-primary)' : '1px solid var(--color-border)',
+            padding: 'var(--space-2) var(--space-4)', 
+            fontSize: 'var(--font-size-sm)', 
+            fontWeight: status === 'unapproved' ? 600 : 400,
+            color: status === 'unapproved' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            borderRadius: '8px 8px 0 0',
+            cursor: 'pointer',
+            marginBottom: '-1px', // overlap the bottom border
+            position: 'relative',
+            zIndex: status === 'unapproved' ? 2 : 1
+          }}
+        >
+          ממתינות להתאמה
+        </button>
+        <button 
+          onClick={() => { setStatus('matched'); setPage(1); }}
+          style={{ 
+            background: status === 'matched' ? 'var(--color-bg-primary)' : 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-border)',
+            borderBottom: status === 'matched' ? '1px solid var(--color-bg-primary)' : '1px solid var(--color-border)',
+            padding: 'var(--space-2) var(--space-4)', 
+            fontSize: 'var(--font-size-sm)', 
+            fontWeight: status === 'matched' ? 600 : 400,
+            color: status === 'matched' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            borderRadius: '8px 8px 0 0',
+            cursor: 'pointer',
+            marginBottom: '-1px',
+            position: 'relative',
+            zIndex: status === 'matched' ? 2 : 1
+          }}
+        >
+          שהותאמו
+        </button>
       </div>
 
       {/* Bulk Actions */}
@@ -327,7 +363,7 @@ export default function ExpenseLineGrid() {
                       >
                         ✏️
                       </button>
-                      <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => handleDelete(line.id)}>
+                      <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => setDeletingLine(line)}>
                         🗑️
                       </button>
                     </div>
@@ -358,6 +394,13 @@ export default function ExpenseLineGrid() {
         onClose={() => setIsModalOpen(false)}
         onSave={() => { fetchLines(); }}
         expenseLine={editingLine}
+      />
+
+      <DeleteExpenseModal
+        isOpen={!!deletingLine}
+        onClose={() => setDeletingLine(null)}
+        onConfirm={handleConfirmDelete}
+        expenseLine={deletingLine}
       />
     </div>
   );

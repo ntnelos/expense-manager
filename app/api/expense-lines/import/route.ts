@@ -19,7 +19,12 @@ export async function POST(req: Request) {
     let inserted = 0;
     let duplicates = 0;
     let errors = 0;
+    let ignored = 0;
     const skippedLines: any[] = [];
+
+    // Fetch ignored expense rules
+    const { data: ignoredData } = await supabase.from('ignored_expense_rules').select('description_pattern');
+    const ignoredDescriptions = new Set((ignoredData || []).map(r => r.description_pattern));
 
     // Process in batches or one by one
     // For simplicity, we process them one by one to handle conflict exceptions gracefully
@@ -35,6 +40,12 @@ export async function POST(req: Request) {
       const amount = Number(line.amount).toFixed(2);
       const desc = (line.description || '').trim();
       
+      if (ignoredDescriptions.has(desc)) {
+        ignored++;
+        skippedLines.push({ ...line, skipReason: 'הוצאה מוגדרת תחת התעלמות בהגדרות' });
+        continue;
+      }
+
       const contentHashStr = `${date}|${amount}|${desc}`;
       const content_hash = hashString(contentHashStr);
 
@@ -68,7 +79,14 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ inserted, duplicates, errors, skippedLines });
+    return NextResponse.json({
+      success: true,
+      inserted,
+      duplicates,
+      errors,
+      ignored,
+      skippedLines
+    });
   } catch (err: any) {
     console.error('Import error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
