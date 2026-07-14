@@ -376,25 +376,27 @@ export default function ExpenseLineGrid() {
                   <td style={{ textAlign: 'end' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
                       {line.status === 'unapproved' && (
-                        <button 
-                          className="btn btn-ghost btn-icon" 
-                          onClick={() => setApprovingLines([line])}
-                          title="אישור ללא חשבונית"
-                          style={{ color: 'var(--color-success)' }}
-                        >
-                          ✔️
-                        </button>
+                        <>
+                          <button 
+                            className="btn btn-ghost btn-icon" 
+                            onClick={() => setApprovingLines([line])}
+                            title="אישור ללא חשבונית"
+                            style={{ color: 'var(--color-success)' }}
+                          >
+                            ✔️
+                          </button>
+                          <button 
+                            className="btn btn-ghost btn-icon" 
+                            onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
+                            title="ערוך שורה"
+                          >
+                            ✏️
+                          </button>
+                          <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => setDeletingLine(line)}>
+                            🗑️
+                          </button>
+                        </>
                       )}
-                      <button 
-                        className="btn btn-ghost btn-icon" 
-                        onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
-                        title="ערוך שורה"
-                      >
-                        ✏️
-                      </button>
-                      <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => setDeletingLine(line)}>
-                        🗑️
-                      </button>
                     </div>
                   </td>
                 </tr>
