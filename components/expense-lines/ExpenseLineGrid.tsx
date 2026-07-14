@@ -36,11 +36,24 @@ export default function ExpenseLineGrid() {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('unapproved'); // Default to awaiting match
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [chargeDate, setChargeDate] = useState('');
+  const [availableChargeDates, setAvailableChargeDates] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/expense-lines/charge-dates')
+      .then(res => res.json())
+      .then(data => {
+        if (data.chargeDates) {
+          setAvailableChargeDates(data.chargeDates.filter(Boolean));
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   // Bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -61,6 +74,7 @@ export default function ExpenseLineGrid() {
         dateTo,
         minAmount,
         maxAmount,
+        chargeDate,
       });
 
       const res = await fetch(`/api/expense-lines?${queryParams.toString()}`);
@@ -74,7 +88,7 @@ export default function ExpenseLineGrid() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount]);
+  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount, chargeDate]);
 
   useEffect(() => {
     const handler = setTimeout(fetchLines, 300);
@@ -135,9 +149,6 @@ export default function ExpenseLineGrid() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
         <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-          <Link href="/expenses/import" className="btn btn-primary">
-            + ייבוא מאקסל / CSV
-          </Link>
           <button className="btn btn-secondary" onClick={() => { setEditingLine(null); setIsModalOpen(true); }}>
             + הוספה ידנית
           </button>
@@ -145,6 +156,32 @@ export default function ExpenseLineGrid() {
         <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
           סה״כ שורות: {totalCount}
         </div>
+      </div>
+      
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 'var(--space-4)', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--space-4)' }}>
+        <button 
+          onClick={() => { setStatus('unapproved'); setPage(1); }}
+          style={{ 
+            background: 'none', border: 'none', padding: 'var(--space-2) var(--space-4)', fontSize: 'var(--font-size-base)', fontWeight: status === 'unapproved' ? 600 : 400,
+            color: status === 'unapproved' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            borderBottom: status === 'unapproved' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            cursor: 'pointer'
+          }}
+        >
+          ממתינות להתאמה
+        </button>
+        <button 
+          onClick={() => { setStatus('matched'); setPage(1); }}
+          style={{ 
+            background: 'none', border: 'none', padding: 'var(--space-2) var(--space-4)', fontSize: 'var(--font-size-base)', fontWeight: status === 'matched' ? 600 : 400,
+            color: status === 'matched' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            borderBottom: status === 'matched' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            cursor: 'pointer'
+          }}
+        >
+          שהותאמו
+        </button>
       </div>
       
       {/* Filter Bar */}
@@ -159,22 +196,22 @@ export default function ExpenseLineGrid() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               style={{ flex: 2 }}
             />
-            <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">כל הסטטוסים</option>
-              <option value="unapproved">ממתין להתאמה</option>
-              <option value="approved">הותאם לחשבונית</option>
-              <option value="approved_no_invoice">אושר ללא חשבונית</option>
+            <select value={chargeDate} onChange={(e) => { setChargeDate(e.target.value); setPage(1); }}>
+              <option value="">כל תאריכי החיוב</option>
+              {availableChargeDates.map(date => (
+                <option key={date} value={date}>{formatToIsraeliDate(date)}</option>
+              ))}
             </select>
-            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
-            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} title="מתאריך עסקה" />
+            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} title="עד תאריך עסקה" />
             <input type="number" placeholder="סכום מזערי" value={minAmount} onChange={(e) => { setMinAmount(e.target.value); setPage(1); }} style={{ maxWidth: '100px' }} />
             <input type="number" placeholder="סכום מירבי" value={maxAmount} onChange={(e) => { setMaxAmount(e.target.value); setPage(1); }} style={{ maxWidth: '100px' }} />
             
-            {(search || status || dateFrom || dateTo || minAmount || maxAmount) && (
+            {(search || chargeDate || dateFrom || dateTo || minAmount || maxAmount) && (
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
-                  setSearch(''); setStatus(''); setDateFrom(''); setDateTo(''); setMinAmount(''); setMaxAmount(''); setPage(1);
+                  setSearch(''); setChargeDate(''); setDateFrom(''); setDateTo(''); setMinAmount(''); setMaxAmount(''); setPage(1);
                 }}
               >
                 נקה
@@ -280,19 +317,16 @@ export default function ExpenseLineGrid() {
                     ) : '—'}
                   </td>
                   <td>{line.card_last_digits ? `**** ${line.card_last_digits}` : '—'}</td>
-                  <td>
-                    {getStatusBadge(line.status)}
-                    <button 
-                      className="btn-icon" 
-                      onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
-                      style={{ marginRight: 'var(--space-2)', verticalAlign: 'middle' }}
-                      title="ערוך שורה"
-                    >
-                      ✏️
-                    </button>
-                  </td>
+                  <td>{getStatusBadge(line.status)}</td>
                   <td style={{ textAlign: 'end' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
+                      <button 
+                        className="btn btn-ghost btn-icon" 
+                        onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
+                        title="ערוך שורה"
+                      >
+                        ✏️
+                      </button>
                       <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => handleDelete(line.id)}>
                         🗑️
                       </button>

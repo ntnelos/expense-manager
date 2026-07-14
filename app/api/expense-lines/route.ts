@@ -12,6 +12,7 @@ export async function GET(req: Request) {
     const dateTo = searchParams.get('dateTo') || '';
     const minAmount = searchParams.get('minAmount') || '';
     const maxAmount = searchParams.get('maxAmount') || '';
+    const chargeDate = searchParams.get('chargeDate') || '';
 
     const offset = (page - 1) * limit;
     const supabase = createServerClient();
@@ -21,7 +22,11 @@ export async function GET(req: Request) {
       .select('*, matches(*)', { count: 'exact' });
 
     if (status) {
-      query = query.eq('status', status);
+      if (status === 'matched') {
+        query = query.in('status', ['approved', 'approved_no_invoice']);
+      } else {
+        query = query.eq('status', status);
+      }
     }
 
     if (search) {
@@ -39,6 +44,9 @@ export async function GET(req: Request) {
     }
     if (maxAmount) {
       query = query.lte('amount', parseFloat(maxAmount));
+    }
+    if (chargeDate) {
+      query = query.eq('charge_date', chargeDate);
     }
 
     query = query.order('transaction_date', { ascending: false }).range(offset, offset + limit - 1);
