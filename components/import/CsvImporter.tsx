@@ -36,10 +36,19 @@ interface ColumnMapping {
   column_map: FieldMap;
 }
 
+interface BlockResponse {
+  id: string;
+  startRowIndex: number;
+  headers: string[];
+  rows: string[][];
+}
+
 export default function CsvImporter() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
+  const [blocks, setBlocks] = useState<BlockResponse[]>([]);
+  const [selectedBlockId, setSelectedBlockId] = useState<string>('');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [extractedCardDigits, setExtractedCardDigits] = useState<string | null>(null);
@@ -51,6 +60,7 @@ export default function CsvImporter() {
   const [selectedMapping, setSelectedMapping] = useState<string>('');
   
   const [saveMappingName, setSaveMappingName] = useState('');
+  const [updateExistingMapping, setUpdateExistingMapping] = useState(false);
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -120,45 +130,72 @@ export default function CsvImporter() {
       const data = await res.json();
       console.log('[Import Debug] Server response:', JSON.stringify(data).substring(0, 500));
 
-      const { headers, rows } = data;
+      const { blocks, metadata } = data;
 
-      if (!headers || headers.length === 0) {
-        alert('לא זוהו עמודות בקובץ. וודא שהקובץ תקין.');
+      if (!blocks || blocks.length === 0) {
+        alert('לא זוהו טבלאות נתונים בקובץ. וודא שהקובץ תקין.');
         return;
       }
 
-      setHeaders(headers);
+      setBlocks(blocks);
+      setExtractedCardDigits(metadata?.cardLastDigits || null);
       
-      // Filter out junk rows (like "סה"כ" or "עסקאות מחוייבות") from the preview
-      const cleanRows = rows.filter((r: string[]) => {
-        const rowText = r.join(' ');
-        if (rowText.includes('סה"כ') || rowText.includes('לידיעה בלבד')) return false;
-        return true;
-      });
-      
-      setRows(cleanRows);
-      setExtractedCardDigits(data.metadata?.cardLastDigits || null);
+      // Auto-detect mapping if headers match a saved pattern, and select the correct block
+      autoDetectMapping(blocks);
       setStep('mapping');
-
-      // Auto-detect mapping if headers match a saved pattern
-      autoDetectMapping(headers);
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'שגיאה בקריאת הקובץ.');
     }
   };
 
-  const autoDetectMapping = (currentHeaders: string[]) => {
-    // Find the first mapping where all mapped columns exist in the current headers
-    const match = savedMappings.find(m => {
-      const mappedCols = Object.values(m.column_map).filter(val => val !== '');
-      if (mappedCols.length === 0) return false;
-      return mappedCols.every(col => currentHeaders.includes(col as string));
-    });
+  const setBlockData = (block: BlockResponse) => {
+    setSelectedBlockId(block.id);
+    setHeaders(block.headers);
+    setRows(block.rows);
+  };
 
-    if (match) {
-      setFieldMap(match.column_map);
-      setSelectedMapping(match.id);
+  const autoDetectMapping = (currentBlocks: BlockResponse[]) => {
+    // Find the first mapping where all mapped columns exist in ANY of the blocks
+    for (const mapping of savedMappings) {
+      const mappedCols = Object.values(mapping.column_map).filter(val => val !== '');
+      if (mappedCols.length === 0) continue;
+
+      const matchingBlock = currentBlocks.find(block => 
+        mappedCols.every(col => block.headers.includes(col as string))
+      );
+
+      if (matchingBlock) {
+        setBlockData(matchingBlock);
+        setFieldMap(mapping.column_map);
+        setSelectedMapping(mapping.id);
+        return;
+      }
+    }
+
+    // If no match, default to the largest block (most rows)
+    const largestBlock = currentBlocks.reduce((prev, current) => (prev.rows.length > current.rows.length) ? prev : current);
+    setBlockData(largestBlock);
+  };
+
+  const handleBlockChange = (blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (block) {
+      setBlockData(block);
+      // Reset mapping when changing blocks, or try to auto-detect just for this block
+      const match = savedMappings.find(m => {
+        const mappedCols = Object.values(m.column_map).filter(val => val !== '');
+        if (mappedCols.length === 0) return false;
+        return mappedCols.every(col => block.headers.includes(col as string));
+      });
+      
+      if (match) {
+        setFieldMap(match.column_map);
+        setSelectedMapping(match.id);
+      } else {
+        setFieldMap({ ...DEFAULT_MAP });
+        setSelectedMapping('');
+      }
     }
   };
 
@@ -268,7 +305,7 @@ export default function CsvImporter() {
 
     try {
       // First save mapping if requested
-      if (saveMappingName && selectedMapping === '') {
+      if (saveMappingName && !updateExistingMapping) {
         await fetch('/api/column-mappings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -278,6 +315,20 @@ export default function CsvImporter() {
             column_map: fieldMap,
           }),
         });
+      } else if (updateExistingMapping && selectedMapping) {
+        const mapping = savedMappings.find(m => m.id === selectedMapping);
+        if (mapping) {
+          await fetch('/api/column-mappings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: mapping.id,
+              mapping_name: mapping.mapping_name,
+              header_pattern: headers,
+              column_map: fieldMap,
+            }),
+          });
+        }
       }
 
       // Then import rows
@@ -344,6 +395,25 @@ export default function CsvImporter() {
         <div className="card-body">
           <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>מיפוי עמודות</h3>
           
+          {blocks.length > 1 && (
+            <div style={{ marginBottom: 'var(--space-6)', background: 'var(--color-bg-tertiary)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
+              <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
+                בחר סקשן לייבוא מתוך הקובץ:
+              </label>
+              <select
+                value={selectedBlockId}
+                onChange={(e) => handleBlockChange(e.target.value)}
+                style={{ width: '100%', maxWidth: '400px' }}
+              >
+                {blocks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    סקשן משורה {b.startRowIndex + 1} ({b.rows.length} הוצאות)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div style={{ marginBottom: 'var(--space-6)', background: 'var(--color-bg-secondary)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)' }}>
             <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
               תבנית מיפוי שמורה:
@@ -417,8 +487,8 @@ export default function CsvImporter() {
             </div>
           </div>
 
-          {selectedMapping === '' && (
-            <div style={{ marginBottom: 'var(--space-6)' }}>
+          <div style={{ marginBottom: 'var(--space-6)' }}>
+            {selectedMapping === '' ? (
               <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
                 <input 
                   type="checkbox" 
@@ -427,17 +497,43 @@ export default function CsvImporter() {
                 />
                 שמור מיפוי זה כתבנית לשימוש עתידי
               </label>
-              {saveMappingName !== '' && (
-                <input
-                  type="text"
-                  value={saveMappingName}
-                  onChange={(e) => setSaveMappingName(e.target.value)}
-                  placeholder="שם התבנית (לדוגמה: ויזה כאל)"
-                  style={{ marginTop: 'var(--space-2)', maxWidth: '300px' }}
-                />
-              )}
-            </div>
-          )}
+            ) : (
+              <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={updateExistingMapping} 
+                    onChange={(e) => {
+                      setUpdateExistingMapping(e.target.checked);
+                      if (e.target.checked) setSaveMappingName('');
+                    }} 
+                  />
+                  עדכן תבנית נוכחית
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={!!saveMappingName && !updateExistingMapping} 
+                    onChange={(e) => {
+                      setSaveMappingName(e.target.checked ? 'תבנית חדשה' : '');
+                      if (e.target.checked) setUpdateExistingMapping(false);
+                    }} 
+                  />
+                  שמור כתבנית חדשה (עותק)
+                </label>
+              </div>
+            )}
+            
+            {saveMappingName !== '' && !updateExistingMapping && (
+              <input
+                type="text"
+                value={saveMappingName}
+                onChange={(e) => setSaveMappingName(e.target.value)}
+                placeholder="שם התבנית (לדוגמה: ויזה כאל)"
+                style={{ marginTop: 'var(--space-2)', maxWidth: '300px' }}
+              />
+            )}
+          </div>
 
           <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>תצוגה מקדימה ({rows.length} שורות סה״כ):</h4>
           <div className="data-table-container" style={{ marginBottom: 'var(--space-6)' }}>
