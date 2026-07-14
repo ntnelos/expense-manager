@@ -32,7 +32,7 @@ export default function ExpenseLineGrid() {
   const [lines, setLines] = useState<ExpenseLine[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(15);
+  const [limit] = useState(100);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
 
