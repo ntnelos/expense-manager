@@ -6,6 +6,7 @@ import { formatToIsraeliDate } from '@/lib/utils/dates';
 import Link from 'next/link';
 import ExpenseLineModal from './ExpenseLineModal';
 import DeleteExpenseModal from './DeleteExpenseModal';
+import ApproveNoInvoiceModal from './ApproveNoInvoiceModal';
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
@@ -63,6 +64,7 @@ export default function ExpenseLineGrid() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<ExpenseLine | null>(null);
   const [deletingLine, setDeletingLine] = useState<ExpenseLine | null>(null);
+  const [approvingLines, setApprovingLines] = useState<ExpenseLine[]>([]);
 
   const fetchLines = useCallback(async () => {
     setLoading(true);
@@ -112,23 +114,30 @@ export default function ExpenseLineGrid() {
     }
   };
 
-  const handleBulkApprove = async () => {
+  const handleOpenBulkApprove = () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`האם אתה בטוח שברצונך לאשר ${selectedIds.size} שורות ללא חשבונית?`)) return;
+    const linesToApprove = lines.filter(l => selectedIds.has(l.id));
+    setApprovingLines(linesToApprove);
+  };
 
+  const handleConfirmApproveNoInvoice = async (note: string) => {
     try {
-      const res = await fetch('/api/expense-lines', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ids: Array.from(selectedIds),
-          status: 'approved_no_invoice',
-        }),
-      });
-      if (res.ok) {
-        setSelectedIds(new Set());
-        fetchLines();
-      }
+      // Run updates in parallel
+      await Promise.all(
+        approvingLines.map(line =>
+          fetch(`/api/expense-lines`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: line.id,
+              status: 'approved_no_invoice',
+              approval_note: note
+            })
+          })
+        )
+      );
+      setSelectedIds(new Set());
+      fetchLines();
     } catch (err) {
       console.error(err);
       alert('שגיאה בעדכון הסטטוס');
@@ -253,7 +262,7 @@ export default function ExpenseLineGrid() {
             zIndex: status === 'matched' ? 2 : 1
           }}
         >
-          שהותאמו
+          שהותאמו/אושרו
         </button>
       </div>
 
@@ -274,7 +283,7 @@ export default function ExpenseLineGrid() {
             <strong>{selectedIds.size}</strong> שורות נבחרו
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <button className="btn btn-primary btn-sm" onClick={handleBulkApprove}>
+            <button className="btn btn-primary btn-sm" onClick={handleOpenBulkApprove}>
               ✅ אשר ללא חשבונית
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())} style={{ color: 'white' }}>
@@ -353,9 +362,21 @@ export default function ExpenseLineGrid() {
                     ) : '—'}
                   </td>
                   <td>{line.card_last_digits ? `**** ${line.card_last_digits}` : '—'}</td>
-                  <td>{getStatusBadge(line.status)}</td>
+                  <td title={line.approval_note ? `הערת אישור: ${line.approval_note}` : undefined}>
+                    {getStatusBadge(line.status)}
+                  </td>
                   <td style={{ textAlign: 'end' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
+                      {line.status === 'unapproved' && (
+                        <button 
+                          className="btn btn-ghost btn-icon" 
+                          onClick={() => setApprovingLines([line])}
+                          title="אישור ללא חשבונית"
+                          style={{ color: 'var(--color-success)' }}
+                        >
+                          ✔️
+                        </button>
+                      )}
                       <button 
                         className="btn btn-ghost btn-icon" 
                         onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
@@ -401,6 +422,13 @@ export default function ExpenseLineGrid() {
         onClose={() => setDeletingLine(null)}
         onConfirm={handleConfirmDelete}
         expenseLine={deletingLine}
+      />
+
+      <ApproveNoInvoiceModal
+        isOpen={approvingLines.length > 0}
+        onClose={() => setApprovingLines([])}
+        onConfirm={handleConfirmApproveNoInvoice}
+        expenseLines={approvingLines}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import type { Invoice, ExpenseLine } from '@/lib/supabase/types';
 import { formatToIsraeliDate } from '@/lib/utils/dates';
 import InvoiceDetailPanel from './InvoiceDetailPanel';
 import AutoMatchModal from './AutoMatchModal';
+import ApproveNoInvoiceModal from '../expense-lines/ApproveNoInvoiceModal';
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
@@ -32,6 +33,9 @@ export default function MatchingArena() {
 
   // Auto-Match modal state
   const [showAutoMatch, setShowAutoMatch] = useState(false);
+  
+  // Approve without invoice state
+  const [approvingLine, setApprovingLine] = useState<ExpenseLine | null>(null);
 
   const fetchUnmatchedData = useCallback(async () => {
     try {
@@ -138,6 +142,29 @@ export default function MatchingArena() {
     } catch (error) {
       console.error(error);
       alert('שגיאה במחיקת השורה.');
+    }
+  };
+
+  const handleConfirmApproveNoInvoice = async (note: string) => {
+    if (!approvingLine) return;
+    try {
+      const res = await fetch(`/api/expense-lines`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: approvingLine.id,
+          status: 'approved_no_invoice',
+          approval_note: note
+        })
+      });
+      if (!res.ok) throw new Error('Failed to approve');
+      
+      setExpenseLines(prev => prev.filter(l => l.id !== approvingLine.id));
+    } catch (error) {
+      console.error(error);
+      alert('שגיאה באישור ההוצאה.');
+    } finally {
+      setApprovingLine(null);
     }
   };
 
@@ -324,6 +351,13 @@ export default function MatchingArena() {
                       {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
                     </button>
                     <button 
+                      onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
+                      title="אישור ללא חשבונית"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.8 }}
+                    >
+                      ✔️
+                    </button>
+                    <button 
                       onClick={(e) => handleDeleteLine(line.id, e)}
                       title="מחק שורה"
                       style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
@@ -362,13 +396,22 @@ export default function MatchingArena() {
                       <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                     </div>
-                    <button 
-                      onClick={(e) => handleDeleteLine(line.id, e)}
-                      title="מחק שורה"
-                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
-                    >
-                      🗑️
-                    </button>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
+                        title="אישור ללא חשבונית"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.8 }}
+                      >
+                        ✔️
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeleteLine(line.id, e)}
+                        title="מחק שורה"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -443,11 +486,19 @@ export default function MatchingArena() {
 
       {showAutoMatch && (
         <AutoMatchModal 
-          proposals={autoMatchProposals} 
+          isOpen={showAutoMatch}
           onClose={() => setShowAutoMatch(false)}
           onConfirm={handleAutoMatchConfirm}
+          proposals={autoMatchProposals}
         />
       )}
+      
+      <ApproveNoInvoiceModal
+        isOpen={!!approvingLine}
+        onClose={() => setApprovingLine(null)}
+        onConfirm={handleConfirmApproveNoInvoice}
+        expenseLines={approvingLine ? [approvingLine] : []}
+      />
     </>
   );
 }

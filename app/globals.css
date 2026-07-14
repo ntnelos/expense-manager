@@ -43,6 +43,8 @@
   --color-warning-muted: rgba(245, 158, 11, 0.15);
   --color-error: #ef4444;
   --color-error-muted: rgba(239, 68, 68, 0.15);
+  --color-danger: var(--color-error);
+  --color-danger-muted: var(--color-error-muted);
   --color-info: #3b82f6;
   --color-info-muted: rgba(59, 130, 246, 0.15);
   --color-neutral: #6b7280;
