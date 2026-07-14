@@ -341,7 +341,15 @@ export default function ExpenseLineGrid() {
                     />
                   </td>
                   <td>{formatToIsraeliDate(line.transaction_date)}</td>
-                  <td style={{ fontWeight: 600 }}>{line.description || '—'}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {line.description || '—'}
+                    {line.approval_note && (
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 400 }}>
+                        <span style={{ color: 'var(--color-success)' }}>✔️</span>
+                        <span>הערת אישור: {line.approval_note}</span>
+                      </div>
+                    )}
+                  </td>
                   <td className="table-amount">
                     <div style={{ fontWeight: 600 }}>{formatCurrency(line.amount)}</div>
                     {line.total_amount && line.total_amount !== line.amount && (
