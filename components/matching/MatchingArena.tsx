@@ -486,7 +486,6 @@ export default function MatchingArena() {
 
       {showAutoMatch && (
         <AutoMatchModal 
-          isOpen={showAutoMatch}
           onClose={() => setShowAutoMatch(false)}
           onConfirm={handleAutoMatchConfirm}
           proposals={autoMatchProposals}
