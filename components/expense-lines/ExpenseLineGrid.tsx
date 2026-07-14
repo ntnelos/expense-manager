@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { ExpenseLine } from '@/lib/supabase/types';
 import { formatToIsraeliDate } from '@/lib/utils/dates';
 import Link from 'next/link';
+import ExpenseLineModal from './ExpenseLineModal';
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
@@ -43,6 +44,10 @@ export default function ExpenseLineGrid() {
 
   // Bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingLine, setEditingLine] = useState<ExpenseLine | null>(null);
 
   const fetchLines = useCallback(async () => {
     setLoading(true);
@@ -128,6 +133,20 @@ export default function ExpenseLineGrid() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+          <Link href="/expenses/import" className="btn btn-primary">
+            + ייבוא מאקסל / CSV
+          </Link>
+          <button className="btn btn-secondary" onClick={() => { setEditingLine(null); setIsModalOpen(true); }}>
+            + הוספה ידנית
+          </button>
+        </div>
+        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          סה״כ שורות: {totalCount}
+        </div>
+      </div>
+      
       {/* Filter Bar */}
       <div className="card animate-in" style={{ marginBottom: 'var(--space-6)' }}>
         <div className="card-body" style={{ padding: 'var(--space-4)' }}>
@@ -245,7 +264,10 @@ export default function ExpenseLineGrid() {
                     <div style={{ fontWeight: 600 }}>{formatCurrency(line.amount)}</div>
                     {line.total_amount && line.total_amount !== line.amount && (
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                        מתוך {formatCurrency(line.total_amount)}
+                        {line.currency !== 'ILS' 
+                          ? `(${line.total_amount} ${line.currency})` 
+                          : `מתוך ${formatCurrency(line.total_amount)}`
+                        }
                         {line.installment_current && line.installment_total ? ` (תשלום ${line.installment_current}/${line.installment_total})` : ''}
                       </div>
                     )}
@@ -258,7 +280,17 @@ export default function ExpenseLineGrid() {
                     ) : '—'}
                   </td>
                   <td>{line.card_last_digits ? `**** ${line.card_last_digits}` : '—'}</td>
-                  <td>{getStatusBadge(line.status)}</td>
+                  <td>
+                    {getStatusBadge(line.status)}
+                    <button 
+                      className="btn-icon" 
+                      onClick={() => { setEditingLine(line); setIsModalOpen(true); }}
+                      style={{ marginRight: 'var(--space-2)', verticalAlign: 'middle' }}
+                      title="ערוך שורה"
+                    >
+                      ✏️
+                    </button>
+                  </td>
                   <td style={{ textAlign: 'end' }}>
                     <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'flex-end' }}>
                       <button className="btn btn-ghost btn-icon" title="מחק" onClick={() => handleDelete(line.id)}>
@@ -286,6 +318,13 @@ export default function ExpenseLineGrid() {
           </div>
         </div>
       )}
+
+      <ExpenseLineModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={() => { fetchLines(); }}
+        expenseLine={editingLine}
+      />
     </div>
   );
 }

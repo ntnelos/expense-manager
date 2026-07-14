@@ -305,7 +305,10 @@ export default function MatchingArena() {
                       {formatCurrency(line.amount)}
                       {line.total_amount && line.total_amount !== line.amount && (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
-                          (מתוך {formatCurrency(line.total_amount)})
+                          {line.currency !== 'ILS' 
+                            ? `(${line.total_amount} ${line.currency})` 
+                            : `(מתוך ${formatCurrency(line.total_amount)})`
+                          }
                         </span>
                       )}
                     </div>
@@ -349,7 +352,10 @@ export default function MatchingArena() {
                         {formatCurrency(line.amount)}
                         {line.total_amount && line.total_amount !== line.amount && (
                           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
-                            (מתוך {formatCurrency(line.total_amount)})
+                            {line.currency !== 'ILS' 
+                              ? `(${line.total_amount} ${line.currency})` 
+                              : `(מתוך ${formatCurrency(line.total_amount)})`
+                            }
                           </span>
                         )}
                       </div>

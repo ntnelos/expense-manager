@@ -466,16 +466,32 @@ export default function CsvImporter() {
           </div>
 
           <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
-            <button className="btn btn-secondary" onClick={() => setStep('upload')}>
+            <button className="btn btn-secondary" onClick={() => setStep('upload')} disabled={isImporting}>
               חזור
             </button>
             <button 
               className="btn btn-primary" 
               disabled={!isValid || isImporting}
               onClick={handleImport}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              {isImporting ? 'מייבא...' : `ייבא ${rows.length} שורות`}
+              {isImporting && (
+                <div style={{ 
+                  width: '16px', height: '16px', 
+                  border: '2px solid rgba(255,255,255,0.3)', 
+                  borderTopColor: '#fff', 
+                  borderRadius: '50%', 
+                  animation: 'spin 1s linear infinite' 
+                }} />
+              )}
+              {isImporting ? 'מייבא נתונים...' : `ייבא ${rows.length} שורות`}
             </button>
+            <style jsx>{`
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
         </div>
       </div>

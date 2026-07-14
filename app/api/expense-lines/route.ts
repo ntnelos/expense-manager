@@ -61,7 +61,7 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, ids, status, approval_note } = body;
+    const { id, ids, status, approval_note, transaction_date, amount, total_amount, description, currency, card_last_digits } = body;
 
     const supabase = createServerClient();
 
@@ -75,6 +75,12 @@ export async function PATCH(req: Request) {
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     if (status !== undefined) updates.status = status;
     if (approval_note !== undefined) updates.approval_note = approval_note;
+    if (transaction_date !== undefined) updates.transaction_date = transaction_date;
+    if (amount !== undefined) updates.amount = amount;
+    if (total_amount !== undefined) updates.total_amount = total_amount;
+    if (description !== undefined) updates.description = description;
+    if (currency !== undefined) updates.currency = currency;
+    if (card_last_digits !== undefined) updates.card_last_digits = card_last_digits;
 
     const { data, error } = await supabase
       .from('expense_lines')
@@ -87,6 +93,41 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true, updated: data });
   } catch (err: any) {
     console.error('PATCH expense_lines error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { transaction_date, amount, total_amount, description, currency, card_last_digits } = body;
+
+    if (!transaction_date || amount === undefined) {
+      return NextResponse.json({ error: 'Transaction date and amount are required' }, { status: 400 });
+    }
+
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from('expense_lines')
+      .insert({
+        transaction_date,
+        amount,
+        total_amount: total_amount || null,
+        description: description || null,
+        currency: currency || 'ILS',
+        card_last_digits: card_last_digits || null,
+        source_file: 'manual',
+        status: 'unapproved',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    return NextResponse.json({ success: true, inserted: data });
+  } catch (err: any) {
+    console.error('POST expense_lines error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
