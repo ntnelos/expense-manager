@@ -73,13 +73,32 @@ export async function POST(req: Request) {
       await sendMessage(chatId, `❌ שגיאה לא ידועה במציאת הקובץ.`);
       return NextResponse.json({ success: true });
     }
-    const fileMeta = await getFile(fileIdToDownload);
+    
+    let fileMeta;
+    try {
+      console.log('[Telegram] Step 4: Getting file metadata...');
+      fileMeta = await getFile(fileIdToDownload);
+    } catch (err: any) {
+      console.error('[Telegram] Step 4 FAILED:', err);
+      await sendMessage(chatId, `❌ שגיאה בהורדת מטא-דאטא מטלגרם: ${err.message}`);
+      return NextResponse.json({ success: true });
+    }
+    
     if (!fileMeta || !fileMeta.file_path) {
       await sendMessage(chatId, `❌ שגיאה בהורדת הקובץ מטלגרם.`);
       return NextResponse.json({ success: true });
     }
 
-    const fileBuffer = await downloadFile(fileMeta.file_path);
+    let fileBuffer;
+    try {
+      console.log('[Telegram] Step 4b: Downloading file buffer...');
+      fileBuffer = await downloadFile(fileMeta.file_path);
+      console.log('[Telegram] Step 4b: File downloaded, size:', fileBuffer.length);
+    } catch (err: any) {
+      console.error('[Telegram] Step 4b FAILED:', err);
+      await sendMessage(chatId, `❌ שגיאה בהורדת הקובץ: ${err.message}`);
+      return NextResponse.json({ success: true });
+    }
 
     // 5. Check duplicate content_hash
     const contentHash = generateSHA256Hash(fileBuffer);
@@ -95,20 +114,32 @@ export async function POST(req: Request) {
     }
 
     // 6. Upload to Drive
-    const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
-    const driveResult = await uploadToGoogleDrive(fileBuffer, fileName, mimeType, new Date());
+    let driveResult;
+    try {
+      console.log('[Telegram] Step 6: Uploading to Google Drive...');
+      const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
+      driveResult = await uploadToGoogleDrive(fileBuffer, fileName, mimeType, new Date());
+      console.log('[Telegram] Step 6: Drive upload success, fileId:', driveResult.fileId);
+    } catch (err: any) {
+      console.error('[Telegram] Step 6 FAILED (Drive):', err);
+      await sendMessage(chatId, `❌ שגיאה בהעלאה ל-Google Drive: ${err.message?.substring(0, 200)}`);
+      return NextResponse.json({ success: true });
+    }
 
     // 7. Run OCR
     let ocrResult;
     try {
+      console.log('[Telegram] Step 7: Running OCR...');
+      const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
       if (isPDF) {
         ocrResult = await extractInvoiceFromPDF(fileBuffer);
       } else {
         ocrResult = await extractInvoiceFromImage(fileBuffer, mimeType);
       }
-    } catch (ocrErr) {
-      console.error('OCR Error in Telegram:', ocrErr);
-      await sendMessage(chatId, `❌ שגיאה בפענוח הנתונים מהתמונה. הקובץ לא נשמר.`);
+      console.log('[Telegram] Step 7: OCR success, supplier:', ocrResult.supplier_name);
+    } catch (ocrErr: any) {
+      console.error('[Telegram] Step 7 FAILED (OCR):', ocrErr);
+      await sendMessage(chatId, `❌ שגיאה בפענוח AI: ${ocrErr.message?.substring(0, 200)}`);
       return NextResponse.json({ success: true });
     }
 
@@ -131,6 +162,7 @@ export async function POST(req: Request) {
     }
 
     // 9. Save to Database
+    console.log('[Telegram] Step 9: Saving to database...');
     const { data: newInvoice, error: insertError } = await supabase
       .from('invoices')
       .insert({
@@ -153,12 +185,13 @@ export async function POST(req: Request) {
       .single();
 
     if (insertError) {
-      console.error('Failed to insert Telegram invoice:', insertError);
-      await sendMessage(chatId, `❌ שגיאה בשמירת הנתונים במסד הנתונים.`);
+      console.error('[Telegram] Step 9 FAILED (DB):', insertError);
+      await sendMessage(chatId, `❌ שגיאה בשמירה במסד הנתונים: ${insertError.message}`);
       return NextResponse.json({ success: true });
     }
 
     // 10. Send Success Message
+    console.log('[Telegram] Step 10: Success! Invoice ID:', newInvoice?.id);
     const summary = `✅ החשבונית נקלטה בהצלחה!\n\n` +
       `🏢 ספק: ${ocrResult.supplier_name || 'לא זוהה'}\n` +
       `💰 סכום: ${ocrResult.total_amount ? '₪' + ocrResult.total_amount : 'לא זוהה'}\n` +
