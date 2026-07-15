@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const telegramUserId = message.from.id;
 
     // Handle /start or commands
-    if (message.text === '/start') {
+    if (message.text && message.text.startsWith('/start')) {
       await sendMessage(chatId, `שלום! המזהה שלך הוא \`${telegramUserId}\`.\nכדי להשתמש בבוט, עליך להוסיף את המזהה הזה בלוח הבקרה של המערכת.`);
       return NextResponse.json({ success: true });
     }
