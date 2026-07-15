@@ -165,7 +165,8 @@ export async function uploadToGoogleDrive(
 export async function deleteFromGoogleDrive(fileId: string): Promise<void> {
   const drive = getDriveClient();
   try {
-    await drive.files.delete({ fileId });
+    await drive.files.delete({ fileId, supportsAllDrives: true });
+    console.log(`Successfully deleted file ${fileId} from Google Drive.`);
   } catch (err: any) {
     console.error(`Failed to delete file from Drive (ID: ${fileId}):`, err);
   }
