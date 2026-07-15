@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/import/gmail/cron",
+      "schedule": "0 3 10 * *"
+    }
+  ]
+}
