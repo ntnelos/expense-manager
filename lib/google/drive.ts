@@ -12,8 +12,16 @@ function getDriveClient() {
     );
   }
 
-  // Format key if it was parsed with literal \n characters
-  const formattedKey = privateKey.replace(/\\n/g, '\n');
+  // Format key: Vercel stores env vars with literal \n instead of real newlines.
+  // Also strip surrounding quotes if present.
+  let formattedKey = privateKey;
+  // Remove surrounding quotes (single or double)
+  if ((formattedKey.startsWith('"') && formattedKey.endsWith('"')) ||
+      (formattedKey.startsWith("'") && formattedKey.endsWith("'"))) {
+    formattedKey = formattedKey.slice(1, -1);
+  }
+  // Replace literal \n with real newlines
+  formattedKey = formattedKey.replace(/\\n/g, '\n');
 
   const auth = new google.auth.JWT({
     email,
