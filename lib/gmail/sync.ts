@@ -136,7 +136,7 @@ export async function syncGmailInvoices() {
           
           // Upload to Google Drive
           console.log(`[Gmail Sync] Uploading ${filename} to Google Drive...`);
-          const driveResult = await uploadToGoogleDrive(buffer, filename, mimeType, internalDate, 'new');
+          const driveResult = await uploadToGoogleDrive(buffer, filename, mimeType, internalDate);
           
           // Run OCR
           console.log(`[Gmail Sync] Running OCR on ${filename}...`);
