@@ -21,16 +21,14 @@ export default function GmailSyncManager() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
-      
-      const { data, error } = await supabase
-        .from('gmail_sync_config')
-        .select('email_address, last_sync_at')
-        .maybeSingle();
-        
-      if (data) {
-        setConfig(data);
+      const res = await fetch('/api/import/gmail/config');
+      if (res.ok) {
+        const { config: data } = await res.json();
+        if (data) {
+          setConfig(data);
+        } else {
+          setConfig(null);
+        }
       } else {
         setConfig(null);
       }

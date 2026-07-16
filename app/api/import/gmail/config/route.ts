@@ -42,3 +42,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function GET() {
+  try {
+    const supabase = createServerClient();
+    
+    const { data, error } = await supabase
+      .from('gmail_sync_config')
+      .select('email_address, last_sync_at')
+      .maybeSingle();
+      
+    if (error) {
+      console.error('Error fetching config:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    
+    return NextResponse.json({ config: data });
+  } catch (err: any) {
+    console.error('Error in GET config:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
