@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import LogoutButton from './LogoutButton';
 
 interface NavItem {
   label: string;
@@ -33,6 +34,10 @@ export default function Sidebar() {
     if (href === '/') return pathname === '/';
     return pathname.startsWith(href);
   };
+
+  if (pathname === '/login') {
+    return null;
+  }
 
   return (
     <aside className="sidebar">
@@ -86,7 +91,8 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+        <LogoutButton />
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-2)' }}>
           v0.1.0 • MVP
         </div>
       </div>
