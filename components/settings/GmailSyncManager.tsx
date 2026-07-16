@@ -21,10 +21,8 @@ export default function GmailSyncManager() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
       
       const { data, error } = await supabase
         .from('gmail_sync_config')
