@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from('expense_lines')
-      .select('*, matches(*, invoices(*))', { count: 'exact' });
+      .select('*, matches(*, invoice:invoices(*))', { count: 'exact' });
 
     if (status) {
       if (status === 'matched') {

@@ -86,7 +86,7 @@ export default function MatchingArena() {
     return score;
   };
 
-  const handleMatch = async (invoiceId: string, lineId: string, matchedAmount: number, matchType: string = 'manual') => {
+  const handleMatch = async (invoiceId: string, lineId: string, matchedAmount: number, matchType: string = 'manual', skipFetch: boolean = false) => {
     try {
       const res = await fetch('/api/matches', {
         method: 'POST',
@@ -104,7 +104,7 @@ export default function MatchingArena() {
         throw new Error(errData.error || 'Failed to match');
       }
 
-      fetchUnmatchedData();
+      if (!skipFetch) fetchUnmatchedData();
     } catch (err: any) {
       throw err;
     }
@@ -126,11 +126,12 @@ export default function MatchingArena() {
   const handleAutoMatchConfirm = async (proposals: any[]) => {
     for (const p of proposals) {
       try {
-        await handleMatch(p.invoice.id, p.line.id, p.invoice.total_amount || p.line.amount, p.score >= 100 ? 'auto_exact' : 'auto_tolerance');
+        await handleMatch(p.invoice.id, p.line.id, p.invoice.total_amount || p.line.amount, p.score >= 100 ? 'auto_exact' : 'auto_tolerance', true);
       } catch (err: any) {
         console.error('Auto match failed for', p, err);
       }
     }
+    fetchUnmatchedData();
     setShowAutoMatch(false);
   };
 
