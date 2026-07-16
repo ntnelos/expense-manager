@@ -108,16 +108,16 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
                   <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700 }}>מידע כללי</h3>
                   {!isEditing ? (
-                    <button onClick={() => setIsEditing(true)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>✏️ ערוך</button>
+                    <button type="button" onClick={() => setIsEditing(true)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>✏️ ערוך</button>
                   ) : (
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button onClick={() => setIsEditing(false)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>ביטול</button>
-                      <button onClick={handleSave} disabled={isSaving} className="btn btn-primary btn-sm" style={{ padding: '2px 8px' }}>{isSaving ? 'שומר...' : '💾 שמור'}</button>
+                      <button type="button" onClick={() => setIsEditing(false)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>ביטול</button>
+                      <button type="submit" form="invoice-edit-form" disabled={isSaving} className="btn btn-primary btn-sm" style={{ padding: '2px 8px' }}>{isSaving ? 'שומר...' : '💾 שמור'}</button>
                     </div>
                   )}
                 </div>
 
-                <div className="detail-grid">
+                <form id="invoice-edit-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="detail-grid">
                   <div className="detail-item">
                     <span className="detail-label">ספק</span>
                     {isEditing ? (
@@ -162,7 +162,7 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                       </span>
                     )}
                   </div>
-                </div>
+                </form>
               </div>
 
               <div className="detail-card">
