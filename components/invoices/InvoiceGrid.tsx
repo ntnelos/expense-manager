@@ -25,7 +25,7 @@ export default function InvoiceGrid() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(15);
+  const [limit] = useState(100);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -132,6 +132,48 @@ export default function InvoiceGrid() {
     } catch (err) {
       console.error('Delete invoice error:', err);
       alert('שגיאה במחיקת מסמך החשבונית.');
+    }
+  };
+
+  const handleCategoryChange = async (e: React.ChangeEvent<HTMLSelectElement>, invoiceId: string) => {
+    e.stopPropagation();
+    const newCategoryId = e.target.value;
+    
+    // Find the category object to optimistically update UI
+    const selectedCat = categories.find(c => c.id === newCategoryId) || null;
+    
+    // Optimistic UI update
+    setInvoices(prev => prev.map(inv => {
+      if (inv.id === invoiceId) {
+        return {
+          ...inv,
+          category_id: newCategoryId || null,
+          categories: selectedCat
+        } as any;
+      }
+      return inv;
+    }));
+
+    // If it's also selected in drawer, update there too
+    if (selectedInvoice && selectedInvoice.id === invoiceId) {
+      setSelectedInvoice(prev => prev ? ({
+        ...prev,
+        category_id: newCategoryId || null,
+        categories: selectedCat
+      } as any) : null);
+    }
+
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: newCategoryId || null })
+      });
+      if (!res.ok) throw new Error('Failed to update category');
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בעדכון הקטגוריה. מרענן נתונים...');
+      fetchInvoices();
     }
   };
 
@@ -305,26 +347,29 @@ export default function InvoiceGrid() {
                   <td className="table-amount" style={{ color: 'var(--color-text-secondary)' }}>
                     {formatCurrency(inv.vat_amount)}
                   </td>
-                  <td>
-                    {(inv as any).categories ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '2px 10px',
-                        borderRadius: 'var(--radius-full)',
-                        fontSize: 'var(--font-size-xs)',
-                        fontWeight: 600,
-                        background: `${(inv as any).categories.color}20`,
-                        color: (inv as any).categories.color,
-                        border: `1px solid ${(inv as any).categories.color}40`,
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {(inv as any).categories.icon} {(inv as any).categories.name}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>—</span>
-                    )}
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="input btn-sm"
+                      style={{ 
+                        padding: '2px 24px 2px 8px', 
+                        fontSize: 'var(--font-size-xs)', 
+                        height: 'auto',
+                        minWidth: '130px',
+                        backgroundColor: (inv as any).categories ? `${(inv as any).categories.color}15` : 'transparent',
+                        borderColor: (inv as any).categories ? `${(inv as any).categories.color}40` : 'var(--color-border)',
+                        color: (inv as any).categories ? (inv as any).categories.color : 'inherit',
+                        fontWeight: (inv as any).categories ? 600 : 400
+                      }}
+                      value={(inv as any).category_id || ''}
+                      onChange={(e) => handleCategoryChange(e, inv.id)}
+                    >
+                      <option value="">ללא קטגוריה</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="table-amount" style={{ color: 'var(--color-success)' }}>
                     {formatCurrency(inv.matched_amount)}
