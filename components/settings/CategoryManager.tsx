@@ -30,6 +30,14 @@ export default function CategoryManager() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editIcon, setEditIcon] = useState('📁');
+  const [editColor, setEditColor] = useState('#6366f1');
+  const [showEditIconPicker, setShowEditIconPicker] = useState(false);
+  const [showEditColorPicker, setShowEditColorPicker] = useState(false);
 
   const fetchCategories = async () => {
     try {
@@ -94,6 +102,40 @@ export default function CategoryManager() {
       setDeleteConfirm(null);
     } catch (err: any) {
       setError(err.message || 'שגיאה בלתי צפויה.');
+    }
+  };
+
+  const startEditing = (cat: Category) => {
+    setEditingId(cat.id);
+    setEditName(cat.name);
+    setEditIcon(cat.icon);
+    setEditColor(cat.color);
+    setShowEditIconPicker(false);
+    setShowEditColorPicker(false);
+    setDeleteConfirm(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editName.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingId, name: editName.trim(), icon: editIcon, color: editColor }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'שגיאה בעדכון קטגוריה.');
+        return;
+      }
+      setCategories((prev) => prev.map(c => c.id === editingId ? data.category : c));
+      setEditingId(null);
+    } catch (err: any) {
+      setError(err.message || 'שגיאה בלתי צפויה.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -282,44 +324,176 @@ export default function CategoryManager() {
             <tbody>
               {categories.map((cat) => (
                 <tr key={cat.id}>
-                  <td style={{ fontSize: '1.3rem', width: '50px', textAlign: 'center' }}>{cat.icon}</td>
-                  <td style={{ fontWeight: 600 }}>{cat.name}</td>
-                  <td>
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: cat.color,
-                    }} />
-                  </td>
-                  <td style={{ textAlign: 'start' }}>
-                    {deleteConfirm === cat.id ? (
-                      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' }}>למחוק?</span>
+                  {editingId === cat.id ? (
+                    <>
+                      <td style={{ position: 'relative' }}>
                         <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => handleDelete(cat.id)}
-                          style={{ color: 'var(--color-error)', fontWeight: 700 }}
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setShowEditIconPicker(!showEditIconPicker); setShowEditColorPicker(false); }}
+                          style={{ fontSize: '1.1rem', padding: 'var(--space-1) var(--space-2)' }}
                         >
-                          כן
+                          {editIcon}
                         </button>
+                        {showEditIconPicker && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              right: 0,
+                              background: 'var(--color-bg-secondary)',
+                              border: '1px solid var(--color-glass-border)',
+                              borderRadius: 'var(--radius-lg)',
+                              padding: 'var(--space-2)',
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(5, 1fr)',
+                              gap: '2px',
+                              zIndex: 100,
+                              boxShadow: 'var(--shadow-lg)',
+                              minWidth: '150px',
+                            }}
+                          >
+                            {ICON_OPTIONS.map((icon) => (
+                              <button
+                                key={icon}
+                                onClick={() => { setEditIcon(icon); setShowEditIconPicker(false); }}
+                                style={{
+                                  fontSize: '1.2rem',
+                                  padding: '4px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: editIcon === icon ? 'var(--color-accent-subtle)' : 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="input btn-sm"
+                          style={{ width: '100%' }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(); }}
+                        />
+                      </td>
+                      <td style={{ position: 'relative' }}>
                         <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setDeleteConfirm(null)}
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setShowEditColorPicker(!showEditColorPicker); setShowEditIconPicker(false); }}
+                          style={{ padding: '4px' }}
                         >
-                          לא
+                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', background: editColor }} />
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="btn btn-ghost btn-icon"
-                        onClick={() => setDeleteConfirm(cat.id)}
-                        title="מחק קטגוריה"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </td>
+                        {showEditColorPicker && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              right: 0,
+                              background: 'var(--color-bg-secondary)',
+                              border: '1px solid var(--color-glass-border)',
+                              borderRadius: 'var(--radius-lg)',
+                              padding: 'var(--space-2)',
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(5, 1fr)',
+                              gap: '4px',
+                              zIndex: 100,
+                              boxShadow: 'var(--shadow-lg)',
+                            }}
+                          >
+                            {COLOR_OPTIONS.map((color) => (
+                              <button
+                                key={color}
+                                onClick={() => { setEditColor(color); setShowEditColorPicker(false); }}
+                                style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '4px',
+                                  background: color,
+                                  border: editColor === color ? '2px solid white' : 'none',
+                                  cursor: 'pointer',
+                                  outline: editColor === color ? `1px solid ${color}` : 'none',
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'start' }}>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={handleSaveEdit}
+                            disabled={saving}
+                          >
+                            שמור
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setEditingId(null)}
+                            disabled={saving}
+                          >
+                            ביטול
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ fontSize: '1.3rem', width: '50px', textAlign: 'center' }}>{cat.icon}</td>
+                      <td style={{ fontWeight: 600 }}>{cat.name}</td>
+                      <td>
+                        <div style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: cat.color,
+                        }} />
+                      </td>
+                      <td style={{ textAlign: 'start' }}>
+                        {deleteConfirm === cat.id ? (
+                          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' }}>למחוק?</span>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleDelete(cat.id)}
+                              style={{ color: 'var(--color-error)', fontWeight: 700 }}
+                            >
+                              כן
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setDeleteConfirm(null)}
+                            >
+                              לא
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => startEditing(cat)}
+                              title="ערוך קטגוריה"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => setDeleteConfirm(cat.id)}
+                              title="מחק קטגוריה"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -98,3 +98,41 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// PATCH: Update a category by ID
+export async function PATCH(request: Request) {
+  try {
+    const { id, name, icon, color } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing category ID' }, { status: 400 });
+    }
+
+    const supabase = createServerClient();
+
+    const updatePayload: any = {};
+    if (name !== undefined) updatePayload.name = name.trim();
+    if (icon !== undefined) updatePayload.icon = icon;
+    if (color !== undefined) updatePayload.color = color;
+
+    const { data, error } = await supabase
+      .from('categories')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'קטגוריה בשם זה כבר קיימת.' }, { status: 409 });
+      }
+      console.error('Supabase update error in categories PATCH:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, category: data });
+  } catch (error: any) {
+    console.error('PATCH categories error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
