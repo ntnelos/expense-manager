@@ -84,15 +84,48 @@ export async function syncGmailInvoices() {
       
       // Sometimes emails are multipart/mixed, and parts contain multipart/alternative, etc.
       // A quick recursive function to find all attachments in the email payload tree
-      const attachments: { attachmentId: string, filename: string, mimeType: string }[] = [];
+      const attachments: { attachmentId: string, filename: string, mimeType: string, size: number }[] = [];
       const findAttachments = (partsList: any[]) => {
         for (const part of partsList) {
           if (part.body?.attachmentId && part.filename) {
-            attachments.push({
-              attachmentId: part.body.attachmentId,
-              filename: part.filename,
-              mimeType: part.mimeType || 'application/octet-stream'
-            });
+            
+            // Heuristic to ignore email signature images (logos, social icons)
+            const isImage = part.mimeType?.startsWith('image/');
+            const lowerName = part.filename.toLowerCase();
+            const size = part.body.size || 0;
+            
+            let isSignatureImage = false;
+            
+            if (isImage) {
+              // 1. If it's a very small image (< 40KB), it's likely a logo/icon
+              if (size > 0 && size < 40000) {
+                isSignatureImage = true;
+              }
+              // 2. Check filename for common signature patterns
+              else if (
+                lowerName.includes('logo') ||
+                lowerName.includes('icon') ||
+                lowerName.includes('signature') ||
+                lowerName.includes('facebook') ||
+                lowerName.includes('twitter') ||
+                lowerName.includes('linkedin') ||
+                lowerName.includes('instagram') ||
+                lowerName.startsWith('image00') // common outlook embedded image
+              ) {
+                isSignatureImage = true;
+              }
+            }
+
+            if (isSignatureImage) {
+              console.log(`[Gmail Sync] Skipping likely signature image: ${part.filename} (${Math.round(size/1024)}KB)`);
+            } else {
+              attachments.push({
+                attachmentId: part.body.attachmentId,
+                filename: part.filename,
+                mimeType: part.mimeType || 'application/octet-stream',
+                size: size
+              });
+            }
           }
           if (part.parts) {
             findAttachments(part.parts);
