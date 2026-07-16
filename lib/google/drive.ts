@@ -160,15 +160,20 @@ export async function uploadToGoogleDrive(
 }
 
 /**
- * Deletes a file from Google Drive.
+ * Deletes a file from Google Drive by moving it to the trash.
+ * (Permanent deletion by Service Account on Shared folders throws 'File not found' error).
  */
 export async function deleteFromGoogleDrive(fileId: string): Promise<void> {
   const drive = getDriveClient();
   try {
-    await drive.files.delete({ fileId, supportsAllDrives: true });
-    console.log(`Successfully deleted file ${fileId} from Google Drive.`);
+    await drive.files.update({ 
+      fileId, 
+      requestBody: { trashed: true },
+      supportsAllDrives: true 
+    });
+    console.log(`Successfully trashed file ${fileId} in Google Drive.`);
   } catch (err: any) {
-    console.error(`Failed to delete file from Drive (ID: ${fileId}):`, err);
+    console.error(`Failed to trash file in Drive (ID: ${fileId}):`, err);
   }
 }
 
