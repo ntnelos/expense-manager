@@ -139,11 +139,7 @@ export async function syncGmailInvoices() {
             continue;
           }
           
-          // Upload to Google Drive
-          console.log(`[Gmail Sync] Uploading ${filename} to Google Drive...`);
-          const driveResult = await uploadToGoogleDrive(buffer, filename, mimeType, internalDate);
-          
-          // Run OCR
+          // 1. Run OCR FIRST (before uploading to Drive)
           console.log(`[Gmail Sync] Running OCR on ${filename}...`);
           let ocrResult;
           const isPDF = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
@@ -154,7 +150,57 @@ export async function syncGmailInvoices() {
             ocrResult = await extractInvoiceFromImage(buffer, mimeType);
           }
           
-          // Assign category
+          // 2. Filter out junk documents
+          if (ocrResult.document_type === 'other') {
+            console.log(`[Gmail Sync] Skipping ${filename} as it is classified as 'other' (e.g., Terms of Use).`);
+            continue;
+          }
+          
+          // 3. Deduplication and Document Hierarchy Logic
+          let skip = false;
+          let updateExistingId = null;
+          
+          if (ocrResult.invoice_date && ocrResult.total_amount !== null) {
+            let dupQuery = supabase
+              .from('invoices')
+              .select('id, document_type')
+              .eq('invoice_date', ocrResult.invoice_date)
+              .eq('total_amount', ocrResult.total_amount);
+              
+            if (ocrResult.supplier_tax_id) {
+               dupQuery = dupQuery.eq('supplier_tax_id', ocrResult.supplier_tax_id);
+            } else if (ocrResult.supplier_name) {
+               dupQuery = dupQuery.eq('supplier_name', ocrResult.supplier_name);
+            }
+            
+            const { data: duplicates } = await dupQuery;
+            
+            if (duplicates && duplicates.length > 0) {
+              for (const dup of duplicates) {
+                if (ocrResult.document_type === 'receipt' && (dup.document_type === 'tax_invoice' || dup.document_type === 'tax_invoice_receipt')) {
+                  console.log(`[Gmail Sync] Skipping receipt ${filename} because tax_invoice already exists.`);
+                  skip = true;
+                  break;
+                } else if ((ocrResult.document_type === 'tax_invoice' || ocrResult.document_type === 'tax_invoice_receipt') && dup.document_type === 'receipt') {
+                  console.log(`[Gmail Sync] Found existing receipt ${dup.id}, will overwrite with tax_invoice ${filename}`);
+                  updateExistingId = dup.id;
+                  break;
+                } else if (ocrResult.document_type === dup.document_type) {
+                  console.log(`[Gmail Sync] Skipping duplicate document ${filename} (same type, date, amount).`);
+                  skip = true;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (skip) continue;
+          
+          // 4. Upload to Google Drive (only if we decided to keep it)
+          console.log(`[Gmail Sync] Uploading ${filename} to Google Drive...`);
+          const driveResult = await uploadToGoogleDrive(buffer, filename, mimeType, internalDate);
+          
+          // 5. Assign category
           let categoryId = null;
           if (ocrResult.suggested_category) {
             const { data: matchedCategory } = await supabase
@@ -167,8 +213,8 @@ export async function syncGmailInvoices() {
             }
           }
           
-          // Save to Database
-          await supabase.from('invoices').insert({
+          // 6. Save to Database (Insert or Update)
+          const invoicePayload = {
             content_hash: contentHash,
             drive_file_id: driveResult.fileId,
             drive_file_url: driveResult.fileUrl,
@@ -183,7 +229,14 @@ export async function syncGmailInvoices() {
             category_id: categoryId,
             raw_ocr_data: ocrResult as any,
             status: 'new'
-          });
+          };
+          
+          if (updateExistingId) {
+             console.log(`[Gmail Sync] Upgrading existing receipt ${updateExistingId} to tax invoice.`);
+             await supabase.from('invoices').update(invoicePayload).eq('id', updateExistingId);
+          } else {
+             await supabase.from('invoices').insert(invoicePayload);
+          }
           
           processedCount++;
         }
