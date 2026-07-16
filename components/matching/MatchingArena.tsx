@@ -43,9 +43,9 @@ export default function MatchingArena() {
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
   });
 
-  const fetchUnmatchedData = useCallback(async () => {
+  const fetchUnmatchedData = useCallback(async (silent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const invRes = await fetch('/api/invoices?status=new,error&limit=10000');
       const invData = await invRes.json();
       
@@ -57,12 +57,12 @@ export default function MatchingArena() {
     } catch (err) {
       console.error('Failed to fetch data for matching arena', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [chargeMonth]);
 
   useEffect(() => {
-    fetchUnmatchedData();
+    fetchUnmatchedData(false);
   }, [fetchUnmatchedData]);
 
   const getMatchScore = (invoice: Invoice, line: ExpenseLine) => {
@@ -104,7 +104,7 @@ export default function MatchingArena() {
         throw new Error(errData.error || 'Failed to match');
       }
 
-      if (!skipFetch) fetchUnmatchedData();
+      if (!skipFetch) fetchUnmatchedData(true);
     } catch (err: any) {
       throw err;
     }
@@ -131,7 +131,7 @@ export default function MatchingArena() {
         console.error('Auto match failed for', p, err);
       }
     }
-    fetchUnmatchedData();
+    fetchUnmatchedData(true);
     setShowAutoMatch(false);
   };
 
@@ -165,7 +165,7 @@ export default function MatchingArena() {
       });
       if (!res.ok) throw new Error('Failed to approve');
       
-      fetchUnmatchedData();
+      fetchUnmatchedData(true);
     } catch (error) {
       console.error(error);
       alert('שגיאה באישור ההוצאה.');
@@ -539,7 +539,7 @@ export default function MatchingArena() {
       <InvoiceDetailPanel 
         invoice={viewingInvoice} 
         onClose={() => setViewingInvoice(null)} 
-        onSaved={fetchUnmatchedData}
+        onSaved={() => fetchUnmatchedData(true)}
       />
 
       {showAutoMatch && (
