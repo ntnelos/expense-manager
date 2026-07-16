@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { uploadToGoogleDrive } from '../google/drive';
 import { extractInvoiceFromPDF, extractInvoiceFromImage } from '../ocr/extract';
 import { generateSHA256Hash } from '../utils/hash';
+import { applySupplierAlias } from '../utils/alias';
 
 export async function syncGmailInvoices() {
   const supabase = createServerClient();
@@ -148,6 +149,11 @@ export async function syncGmailInvoices() {
             ocrResult = await extractInvoiceFromPDF(buffer);
           } else {
             ocrResult = await extractInvoiceFromImage(buffer, mimeType);
+          }
+          
+          // Apply smart supplier alias translation
+          if (ocrResult.supplier_name) {
+            ocrResult.supplier_name = await applySupplierAlias(ocrResult.supplier_name);
           }
           
           // 2. Filter out junk documents

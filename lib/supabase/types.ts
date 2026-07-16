@@ -76,6 +76,13 @@ export interface TelegramUser {
   created_at: string;
 }
 
+export interface SupplierAlias {
+  id: string;
+  original_name: string;
+  alias_name: string;
+  created_at: string;
+}
+
 // ---- Derived / UI Types ----
 
 export interface MatchWithRelations extends Match {

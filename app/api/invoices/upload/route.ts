@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 import { extractInvoiceFromImage, extractInvoiceFromPDF } from '@/lib/ocr/extract';
 import { generateSHA256Hash } from '@/lib/utils/hash';
+import { applySupplierAlias } from '@/lib/utils/alias';
 
 export async function POST(request: Request) {
   let uploadedFileId: string | null = null;
@@ -78,6 +79,11 @@ export async function POST(request: Request) {
         is_credit_note: false,
         suggested_category: null
       };
+    }
+
+    // 3.2 Apply Smart Supplier Alias Translation
+    if (!hasOcrError && ocrResult.supplier_name) {
+      ocrResult.supplier_name = await applySupplierAlias(ocrResult.supplier_name);
     }
 
     // 3.5 Handle Foreign Currency Conversion
