@@ -322,7 +322,7 @@ export default function MatchingArena() {
             )}
           </div>
           
-          <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             {expenseLines.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon">✅</div>
@@ -334,7 +334,7 @@ export default function MatchingArena() {
                 <div 
                   key={line.id} 
                   style={{ 
-                    padding: 'var(--space-3)', 
+                    padding: 'var(--space-2)', 
                     background: score > 50 ? 'var(--color-success-muted)' : 'var(--color-bg-secondary)', 
                     border: `1px solid ${score > 50 ? 'var(--color-success)' : 'var(--color-glass-border)'}`,
                     borderRadius: 'var(--radius-md)',
@@ -344,10 +344,10 @@ export default function MatchingArena() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
                       {formatCurrency(line.amount)}
                       {line.total_amount && line.total_amount !== line.amount && (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
                           {line.currency !== 'ILS' 
                             ? `(${line.total_amount} ${line.currency})` 
                             : `(מתוך ${formatCurrency(line.total_amount)})`
@@ -355,8 +355,8 @@ export default function MatchingArena() {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
+                    <div style={{ fontSize: 'var(--font-size-xs)' }}>{line.description}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                     {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
@@ -407,7 +407,7 @@ export default function MatchingArena() {
                 <div 
                   key={line.id} 
                   style={{ 
-                    padding: 'var(--space-3)', 
+                    padding: 'var(--space-2)', 
                     background: 'var(--color-bg-secondary)', 
                     border: '1px solid var(--color-glass-border)',
                     borderRadius: 'var(--radius-md)',
@@ -416,10 +416,10 @@ export default function MatchingArena() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
                         {formatCurrency(line.amount)}
                         {line.total_amount && line.total_amount !== line.amount && (
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
                             {line.currency !== 'ILS' 
                               ? `(${line.total_amount} ${line.currency})` 
                               : `(מתוך ${formatCurrency(line.total_amount)})`
@@ -427,8 +427,8 @@ export default function MatchingArena() {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-sm)' }}>{line.description}</div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
+                      <div style={{ fontSize: 'var(--font-size-xs)' }}>{line.description}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                       {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
@@ -484,7 +484,7 @@ export default function MatchingArena() {
             </div>
           </div>
           
-          <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             {invoices.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon">✅</div>
@@ -496,7 +496,7 @@ export default function MatchingArena() {
                   key={inv.id} 
                   onClick={() => setSelectedInvoice(prev => prev?.id === inv.id ? null : inv)}
                   style={{ 
-                    padding: 'var(--space-3)', 
+                    padding: 'var(--space-2)', 
                     background: selectedInvoice?.id === inv.id ? 'var(--color-accent-subtle)' : 'var(--color-bg-secondary)', 
                     border: `1px solid ${selectedInvoice?.id === inv.id ? 'var(--color-accent)' : 'var(--color-glass-border)'}`,
                     borderRadius: 'var(--radius-md)',
@@ -505,14 +505,14 @@ export default function MatchingArena() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)', color: selectedInvoice?.id === inv.id ? 'var(--color-accent)' : 'inherit' }}>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: selectedInvoice?.id === inv.id ? 'var(--color-accent)' : 'inherit' }}>
                       {formatCurrency(inv.total_amount)}
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ fontSize: '10px', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                       {inv.original_filename?.split('.').pop()?.toUpperCase()}
                     </div>
                   </div>
-                  <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                     {inv.status === 'error' && <span title="חשבונית לא מזוהה" style={{ color: 'var(--color-warning)' }}>⚠️</span>}
                     <span 
                       onClick={(e) => { e.stopPropagation(); setViewingInvoice(inv); }}
@@ -522,7 +522,7 @@ export default function MatchingArena() {
                       {inv.supplier_name || 'ספק לא ידוע'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(inv.invoice_date)}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(inv.invoice_date)}</div>
                 </div>
               ))
             )}
@@ -541,6 +541,7 @@ export default function MatchingArena() {
           onClose={() => setShowAutoMatch(false)}
           onConfirm={handleAutoMatchConfirm}
           proposals={autoMatchProposals}
+          onViewInvoice={(invoice) => setViewingInvoice(invoice)}
         />
       )}
       

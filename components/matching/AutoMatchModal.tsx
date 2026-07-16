@@ -15,6 +15,7 @@ interface AutoMatchModalProps {
   proposals: AutoMatchProposal[];
   onClose: () => void;
   onConfirm: (selectedMatches: AutoMatchProposal[]) => Promise<void>;
+  onViewInvoice?: (invoice: Invoice) => void;
 }
 
 function formatCurrency(amount: number | null): string {
@@ -25,7 +26,7 @@ function formatCurrency(amount: number | null): string {
   }).format(amount);
 }
 
-export default function AutoMatchModal({ proposals, onClose, onConfirm }: AutoMatchModalProps) {
+export default function AutoMatchModal({ proposals, onClose, onConfirm, onViewInvoice }: AutoMatchModalProps) {
   const [localProposals, setLocalProposals] = useState<AutoMatchProposal[]>(proposals);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -112,7 +113,13 @@ export default function AutoMatchModal({ proposals, onClose, onConfirm }: AutoMa
                     />
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{p.invoice.supplier_name || 'ספק לא ידוע'}</div>
+                    <div 
+                      style={{ fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); onViewInvoice?.(p.invoice); }}
+                      title="לחץ לצפייה בחשבונית"
+                    >
+                      {p.invoice.supplier_name || 'ספק לא ידוע'}
+                    </div>
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
                       {formatToIsraeliDate(p.invoice.invoice_date)}
                     </div>
