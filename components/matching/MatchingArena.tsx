@@ -365,14 +365,17 @@ export default function MatchingArena() {
                         <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                           ✅ הותאם
                         </span>
-                        {(line as any).matches && (line as any).matches.length > 0 && (line as any).matches[0].invoice && (
-                          <button 
-                            className="btn btn-secondary btn-sm"
-                            onClick={(e) => { e.stopPropagation(); setViewingInvoice((line as any).matches[0].invoice); }}
-                          >
-                            📄 צפה בחשבונית
-                          </button>
-                        )}
+                        {(() => {
+                          const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
+                          return matchObj && matchObj.invoice ? (
+                            <button 
+                              className="btn btn-secondary btn-sm"
+                              onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                            >
+                              📄 צפה בחשבונית
+                            </button>
+                          ) : null;
+                        })()}
                       </>
                     ) : (
                       <>
@@ -412,7 +415,6 @@ export default function MatchingArena() {
                     background: 'var(--color-bg-secondary)', 
                     border: '1px solid var(--color-glass-border)',
                     borderRadius: 'var(--radius-md)',
-                    opacity: 0.7
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -437,14 +439,17 @@ export default function MatchingArena() {
                           <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                             ✅ הותאם
                           </span>
-                          {(line as any).matches && (line as any).matches.length > 0 && (line as any).matches[0].invoice && (
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={(e) => { e.stopPropagation(); setViewingInvoice((line as any).matches[0].invoice); }}
-                            >
-                              📄 צפה בחשבונית
-                            </button>
-                          )}
+                          {(() => {
+                            const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
+                            return matchObj && matchObj.invoice ? (
+                              <button 
+                                className="btn btn-secondary btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                              >
+                                📄 צפה בחשבונית
+                              </button>
+                            ) : null;
+                          })()}
                         </>
                       ) : (
                         <>
