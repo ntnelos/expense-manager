@@ -18,22 +18,27 @@ export async function syncGmailInvoices() {
     return { success: false, message: 'Gmail not connected' };
   }
   
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) {
-    console.error('[Gmail Sync] Missing Google OAuth environment variables');
-    return { success: false, message: 'Missing OAuth configuration' };
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    console.error('[Gmail Sync] Missing Google Service Account environment variables');
+    return { success: false, message: 'Missing Service Account configuration' };
   }
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-  
-  oauth2Client.setCredentials({
-    refresh_token: config.refresh_token
+  // Format key: Vercel stores env vars with literal \n instead of real newlines.
+  let formattedKey = process.env.GOOGLE_PRIVATE_KEY;
+  if ((formattedKey.startsWith('"') && formattedKey.endsWith('"')) ||
+      (formattedKey.startsWith("'") && formattedKey.endsWith("'"))) {
+    formattedKey = formattedKey.slice(1, -1);
+  }
+  formattedKey = formattedKey.replace(/\\n/g, '\n');
+
+  const auth = new google.auth.JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: formattedKey,
+    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    subject: config.email_address // Domain-Wide Delegation
   });
   
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = google.gmail({ version: 'v1', auth });
   
   // 2. Build search query
   let query = 'has:attachment (filename:pdf OR filename:jpg OR filename:jpeg OR filename:png)';

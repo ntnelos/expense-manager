@@ -12,32 +12,15 @@ export default function GmailSyncManager() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
+  const [inputEmail, setInputEmail] = useState('');
 
   useEffect(() => {
     fetchConfig();
-    
-    // Check for OAuth callbacks in URL
-    const searchParams = new URLSearchParams(window.location.search);
-    const success = searchParams.get('success');
-    const error = searchParams.get('error');
-    const errorMsg = searchParams.get('message');
-    
-    if (success === 'gmail_connected') {
-      setMessage('חיבור ל-Gmail בוצע בהצלחה!');
-      // Clean up URL
-      window.history.replaceState({}, document.title, '/settings');
-    } else if (error) {
-      setMessage(`שגיאה בחיבור: ${errorMsg || error}`);
-      window.history.replaceState({}, document.title, '/settings');
-    }
   }, []);
 
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      // In a real app we'd have a GET endpoint for this, but we can query Supabase directly from client 
-      // if RLS allows it. Since we haven't exposed a GET endpoint for config, let's create a quick API fetch
-      // Actually, let's fetch using supabase client directly:
       const { createClient } = await import('@supabase/supabase-js');
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -60,8 +43,32 @@ export default function GmailSyncManager() {
     }
   };
 
-  const handleConnect = () => {
-    window.location.href = '/api/auth/google/login';
+  const handleConnect = async () => {
+    if (!inputEmail || !inputEmail.includes('@')) {
+      setMessage('נא להזין כתובת מייל תקינה');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const res = await fetch('/api/import/gmail/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_address: inputEmail })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setMessage('כתובת המייל הוגדרה בהצלחה!');
+        fetchConfig();
+      } else {
+        setMessage(`שגיאה בהגדרה: ${data.error}`);
+      }
+    } catch (err) {
+      setMessage('שגיאה בתקשורת עם השרת');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDisconnect = async () => {
@@ -115,7 +122,7 @@ export default function GmailSyncManager() {
 
   return (
     <div className="card p-6 mb-6">
-      <h2 className="text-xl font-bold mb-4">סריקת חשבוניות מ-Gmail</h2>
+      <h2 className="text-xl font-bold mb-4">סריקת חשבוניות מ-Gmail (ארגוני)</h2>
       
       {message && (
         <div className={`p-3 mb-4 rounded ${message.includes('שגיאה') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
@@ -126,15 +133,25 @@ export default function GmailSyncManager() {
       {!config ? (
         <div>
           <p className="mb-4 text-gray-600">
-            חבר את חשבון ה-Gmail שלך כדי לאפשר למערכת לסרוק חשבוניות באופן אוטומטי פעם בחודש. 
-            בנוסף תוכל לבצע סריקה יזומה מתי שתרצה.
+            הזן את כתובת המייל הארגונית שממנה תרצה לייבא חשבוניות. 
+            המערכת משתמשת בהרשאות אדמין (Domain-Wide Delegation) ולכן אין צורך בהתחברות אישית.
           </p>
-          <button 
-            onClick={handleConnect}
-            className="btn btn-primary bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            חבר חשבון Google
-          </button>
+          <div className="flex gap-2 max-w-md">
+            <input 
+              type="email" 
+              placeholder="fin@confettix.co.il" 
+              className="input flex-1 text-left direction-ltr"
+              value={inputEmail}
+              onChange={(e) => setInputEmail(e.target.value)}
+              dir="ltr"
+            />
+            <button 
+              onClick={handleConnect}
+              className="btn btn-primary bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+            >
+              הגדר תיבה
+            </button>
+          </div>
         </div>
       ) : (
         <div>
