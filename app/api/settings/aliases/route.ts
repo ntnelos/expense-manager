@@ -50,6 +50,17 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
+    // Retroactively update existing invoices that match the original name
+    const { error: updateError } = await supabase
+      .from('invoices')
+      .update({ supplier_name: alias_name })
+      .ilike('supplier_name', `%${original_name}%`);
+      
+    if (updateError) {
+      console.error('Error updating existing invoices with new alias:', updateError);
+      // We don't fail the request, the alias was created successfully
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

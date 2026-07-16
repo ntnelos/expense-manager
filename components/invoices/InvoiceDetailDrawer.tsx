@@ -25,6 +25,11 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  
+  // Inline Alias States
+  const [showAliasForm, setShowAliasForm] = useState(false);
+  const [aliasName, setAliasName] = useState('');
+  const [savingAlias, setSavingAlias] = useState(false);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -118,7 +123,6 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
     }
   };
 
-  // Convert Google Drive view link to embedded viewer URL if possible
   const getEmbedUrl = (url: string) => {
     if (!url) return '';
     
@@ -127,6 +131,42 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       return url.replace('/view', '/preview');
     }
     return url;
+  };
+
+  const handleAddAlias = async () => {
+    if (!formData.supplier_name || !aliasName) return;
+    
+    try {
+      setSavingAlias(true);
+      setError(null);
+      
+      const res = await fetch('/api/settings/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          original_name: formData.supplier_name, 
+          alias_name: aliasName 
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'שגיאה בשמירת הכינוי');
+      }
+
+      // Automatically update the supplier name in the form
+      setFormData(prev => ({ ...prev, supplier_name: aliasName }));
+      setShowAliasForm(false);
+      setAliasName('');
+      
+      // Also notify parent of the change so the grid updates instantly
+      onUpdate({ ...invoice, supplier_name: aliasName } as Invoice);
+
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingAlias(false);
+    }
   };
 
   return (
@@ -266,9 +306,18 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
               {/* Supplier Name */}
               <div>
-                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
-                  Supplier Name (שם העסק)
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
+                  <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>
+                    Supplier Name (שם העסק)
+                  </label>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAliasForm(!showAliasForm)}
+                    style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    + הוסף כינוי (Alias)
+                  </button>
+                </div>
                 <input
                   type="text"
                   name="supplier_name"
@@ -276,6 +325,26 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
                   onChange={handleInputChange}
                   style={{ width: '100%' }}
                 />
+                
+                {showAliasForm && (
+                  <div style={{ marginTop: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--color-bg-primary)', border: '1px solid var(--color-glass-border)', borderRadius: 'var(--radius-md)', display: 'flex', gap: 'var(--space-2)' }}>
+                    <input 
+                      type="text"
+                      placeholder="הזן כינוי חדש (למשל: כביש 6)"
+                      value={aliasName}
+                      onChange={(e) => setAliasName(e.target.value)}
+                      style={{ flex: 1, fontSize: 'var(--font-size-sm)', padding: 'var(--space-1) var(--space-2)' }}
+                    />
+                    <button 
+                      type="button"
+                      onClick={handleAddAlias}
+                      disabled={savingAlias || !aliasName}
+                      className="btn btn-primary btn-sm"
+                    >
+                      {savingAlias ? 'שומר...' : 'שמור'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Supplier Tax ID */}
