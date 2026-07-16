@@ -200,7 +200,6 @@ export async function POST(request: Request) {
         category_id: categoryId,
         status: hasOcrError ? 'error' : 'new',
         raw_ocr_data: hasOcrError ? { error: ocrErrorMessage } : (ocrResult as any),
-        ocr_verified: false,
       })
       .select()
       .single();

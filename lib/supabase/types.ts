@@ -21,7 +21,6 @@ export interface Invoice {
   document_type: 'tax_invoice' | 'receipt' | 'tax_invoice_receipt' | 'other' | null;
   status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error';
   raw_ocr_data: Record<string, unknown> | null;
-  ocr_verified: boolean;
   created_at: string;
   updated_at: string;
 }

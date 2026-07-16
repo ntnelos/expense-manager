@@ -48,7 +48,6 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         total_amount: invoice.total_amount || 0,
         vat_amount: invoice.vat_amount || 0,
         document_type: invoice.document_type || 'other',
-        ocr_verified: invoice.ocr_verified,
       });
       setSelectedCategoryId((invoice as any).category_id || '');
       // Small timeout to allow transition
@@ -85,7 +84,6 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         id: invoice.id,
         ...formData,
         category_id: selectedCategoryId || null,
-        ocr_verified: verified ? true : formData.ocr_verified,
       };
 
       const res = await fetch('/api/invoices', {
@@ -101,20 +99,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       const data = await res.json();
       if (data.success) {
         onUpdate(data.invoice);
-        if (verified) {
-          handleClose();
-        } else {
-          setFormData({
-            supplier_name: data.invoice.supplier_name || '',
-            supplier_tax_id: data.invoice.supplier_tax_id || '',
-            invoice_date: data.invoice.invoice_date || '',
-            total_amount: data.invoice.total_amount || 0,
-            vat_amount: data.invoice.vat_amount || 0,
-            document_type: data.invoice.document_type || 'other',
-            ocr_verified: data.invoice.ocr_verified,
-          });
-          setSelectedCategoryId(data.invoice.category_id || '');
-        }
+        handleClose();
       }
     } catch (err: any) {
       setError(err.message || 'אירעה שגיאה בעת שמירת השינויים בחשבונית.');
@@ -499,11 +484,8 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             <button className="btn btn-secondary" onClick={handleClose} disabled={saving}>
               ביטול
             </button>
-            <button className="btn btn-secondary" onClick={() => handleSave(false)} disabled={saving}>
-              {saving ? 'שומר...' : 'שמור טיוטה'}
-            </button>
-            <button className="btn btn-primary" onClick={() => handleSave(true)} disabled={saving}>
-              {saving ? 'מאמת...' : 'אמת ואשר OCR ✅'}
+            <button className="btn btn-primary" onClick={() => handleSave(false)} disabled={saving}>
+              {saving ? 'שומר...' : 'שמור שינויים'}
             </button>
           </div>
         </div>

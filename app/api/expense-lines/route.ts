@@ -13,13 +13,14 @@ export async function GET(req: Request) {
     const minAmount = searchParams.get('minAmount') || '';
     const maxAmount = searchParams.get('maxAmount') || '';
     const chargeDate = searchParams.get('chargeDate') || '';
+    const chargeMonth = searchParams.get('chargeMonth') || '';
 
     const offset = (page - 1) * limit;
     const supabase = createServerClient();
 
     let query = supabase
       .from('expense_lines')
-      .select('*, matches(*)', { count: 'exact' });
+      .select('*, matches(*, invoices(*))', { count: 'exact' });
 
     if (status) {
       if (status === 'matched') {
@@ -47,6 +48,19 @@ export async function GET(req: Request) {
     }
     if (chargeDate) {
       query = query.eq('charge_date', chargeDate);
+    }
+    if (chargeMonth) {
+      // chargeMonth is YYYY-MM
+      const startDate = `${chargeMonth}-01`;
+      const endYear = parseInt(chargeMonth.split('-')[0]);
+      const endMonth = parseInt(chargeMonth.split('-')[1]);
+      const nextMonth = endMonth === 12 ? 1 : endMonth + 1;
+      const nextYear = endMonth === 12 ? endYear + 1 : endYear;
+      const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
+      
+      // we check if charge_date is within the month. 
+      // If charge_date is null, we fallback to transaction_date.
+      query = query.or(`and(charge_date.gte.${startDate},charge_date.lt.${endDate}),and(charge_date.is.null,transaction_date.gte.${startDate},transaction_date.lt.${endDate})`);
     }
 
     query = query.order('transaction_date', { ascending: false }).range(offset, offset + limit - 1);

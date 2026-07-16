@@ -103,7 +103,6 @@ export async function PATCH(request: Request) {
       'vat_amount',
       'document_type',
       'status',
-      'ocr_verified',
       'category_id',
     ];
 

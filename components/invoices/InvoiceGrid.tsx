@@ -325,7 +325,6 @@ export default function InvoiceGrid() {
                 <th>קטגוריה</th>
                 <th>הותאם</th>
                 <th>סטטוס</th>
-                <th>מאומת</th>
                 <th style={{ textAlign: 'left' }}>פעולות</th>
               </tr>
             </thead>
@@ -376,13 +375,6 @@ export default function InvoiceGrid() {
                   </td>
                   <td>
                     <StatusBadge status={inv.status} />
-                  </td>
-                  <td>
-                    {inv.ocr_verified ? (
-                      <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>✅ כן</span>
-                    ) : (
-                      <span style={{ color: 'var(--color-warning)', fontWeight: 500 }}>⏳ טיוטה</span>
-                    )}
                   </td>
                   <td style={{ textAlign: 'left' }}>
                     <button
