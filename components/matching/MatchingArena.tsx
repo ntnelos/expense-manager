@@ -359,22 +359,29 @@ export default function MatchingArena() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                       {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
-                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                          <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                            ✅ הותאם
-                          </span>
-                          {(() => {
-                            const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
-                            return matchObj && matchObj.invoice ? (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
-                              >
-                                📄 צפה בחשבונית
-                              </button>
-                            ) : null;
-                          })()}
-                        </div>
+                        <>
+                          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                            <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                              ✅ הותאם
+                            </span>
+                            {(() => {
+                              const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
+                              return matchObj && matchObj.invoice ? (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                                >
+                                  📄 צפה בחשבונית
+                                </button>
+                              ) : null;
+                            })()}
+                          </div>
+                          {line.status === 'approved_no_invoice' && line.approval_note && (
+                            <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontStyle: 'italic', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                              סיבה: {line.approval_note}
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <>
                           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
@@ -435,22 +442,29 @@ export default function MatchingArena() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                       {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
-                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                          <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                            ✅ הותאם
-                          </span>
-                          {(() => {
-                            const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
-                            return matchObj && matchObj.invoice ? (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
-                              >
-                                📄 צפה בחשבונית
-                              </button>
-                            ) : null;
-                          })()}
-                        </div>
+                        <>
+                          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                            <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                              ✅ הותאם
+                            </span>
+                            {(() => {
+                              const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
+                              return matchObj && matchObj.invoice ? (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                                >
+                                  📄 צפה בחשבונית
+                                </button>
+                              ) : null;
+                            })()}
+                          </div>
+                          {line.status === 'approved_no_invoice' && line.approval_note && (
+                            <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontStyle: 'italic', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                              סיבה: {line.approval_note}
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <>
                           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
