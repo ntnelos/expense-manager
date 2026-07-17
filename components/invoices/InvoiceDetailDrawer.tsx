@@ -48,6 +48,8 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         total_amount: invoice.total_amount || 0,
         vat_amount: invoice.vat_amount || 0,
         document_type: invoice.document_type || 'other',
+        currency: invoice.currency || 'ILS',
+        original_amount: invoice.original_amount || 0,
       });
       setSelectedCategoryId((invoice as any).category_id || '');
       // Small timeout to allow transition
@@ -84,6 +86,8 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         id: invoice.id,
         ...formData,
         category_id: selectedCategoryId || null,
+        // Ensure original_amount is set correctly when saving
+        original_amount: formData.currency !== 'ILS' ? formData.original_amount : null,
       };
 
       const res = await fetch('/api/invoices', {
@@ -105,6 +109,28 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       setError(err.message || 'אירעה שגיאה בעת שמירת השינויים בחשבונית.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const calculateExchangeRate = async () => {
+    if (!formData.invoice_date || !formData.currency || formData.currency === 'ILS' || !formData.original_amount) return;
+    try {
+      const response = await fetch(`https://api.frankfurter.dev/v1/${formData.invoice_date}?base=${formData.currency}&symbols=ILS`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.rates && data.rates.ILS) {
+          const rate = data.rates.ILS;
+          setFormData(prev => ({
+            ...prev,
+            total_amount: Math.round(Number(prev.original_amount) * rate * 100) / 100
+          }));
+        }
+      } else {
+        alert('שגיאה במשיכת שער חליפין');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בחישוב המרה');
     }
   };
 
@@ -360,10 +386,60 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
                 />
               </div>
 
-              {/* Total Amount */}
+              {/* Currency Selector */}
               <div>
                 <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
-                  Total Amount (סה"כ כולל מע"מ)
+                  Currency (מטבע)
+                </label>
+                <select
+                  name="currency"
+                  value={formData.currency || 'ILS'}
+                  onChange={handleInputChange}
+                  style={{ width: '100%' }}
+                >
+                  <option value="ILS">שקל חדש (ILS)</option>
+                  <option value="USD">דולר אמריקאי (USD)</option>
+                  <option value="EUR">אירו (EUR)</option>
+                  <option value="GBP">לירה שטרלינג (GBP)</option>
+                </select>
+              </div>
+
+              {/* Original Amount (Only if currency is not ILS) */}
+              {formData.currency !== 'ILS' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
+                    Original Amount ({formData.currency})
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', gap: 'var(--space-2)' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="original_amount"
+                        value={formData.original_amount || 0}
+                        onChange={handleInputChange}
+                        style={{ width: '100%', paddingLeft: 'var(--space-8)' }}
+                      />
+                      <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-secondary)' }}>
+                        {formData.currency === 'USD' ? '$' : formData.currency === 'EUR' ? '€' : formData.currency === 'GBP' ? '£' : formData.currency}
+                      </span>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={calculateExchangeRate}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0 var(--space-4)' }}
+                    >
+                      💱 חשב שקלים
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Total Amount in ILS */}
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
+                  Total ILS (סה"כ בשקלים כולל מע"מ)
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input

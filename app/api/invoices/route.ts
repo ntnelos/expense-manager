@@ -106,6 +106,8 @@ export async function PATCH(request: Request) {
       'document_type',
       'status',
       'category_id',
+      'currency',
+      'original_amount',
     ];
 
     for (const key of allowedKeys) {
