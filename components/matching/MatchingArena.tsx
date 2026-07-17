@@ -561,8 +561,3 @@ export default function MatchingArena() {
     </>
   );
 }
-expenseLines = { approvingLine? [approvingLine]: [] }
-  />
-    </>
-  );
-}
