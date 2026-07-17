@@ -15,6 +15,8 @@ export async function GET(request: Request) {
     const minAmount = searchParams.get('minAmount') || '';
     const maxAmount = searchParams.get('maxAmount') || '';
     const categoryId = searchParams.get('categoryId') || '';
+    const sortBy = searchParams.get('sortBy') || 'created_at';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
 
     const offset = (page - 1) * limit;
     const supabase = createServerClient();
@@ -56,8 +58,8 @@ export async function GET(request: Request) {
       query = query.eq('category_id', categoryId);
     }
 
-    // Sort by newest created first
-    query = query.order('created_at', { ascending: false });
+    // Sort
+    query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
     // Pagination
     query = query.range(offset, offset + limit - 1);

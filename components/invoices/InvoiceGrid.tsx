@@ -38,6 +38,10 @@ export default function InvoiceGrid() {
   const [maxAmount, setMaxAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
 
+  // Sort State
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
   // Categories
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -65,6 +69,8 @@ export default function InvoiceGrid() {
         minAmount,
         maxAmount,
         categoryId,
+        sortBy,
+        sortOrder,
       });
 
       const res = await fetch(`/api/invoices?${queryParams.toString()}`);
@@ -80,7 +86,7 @@ export default function InvoiceGrid() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount, categoryId]);
+  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount, categoryId, sortBy, sortOrder]);
 
   useEffect(() => {
     // Debounce search filter updates to prevent hitting the API on every keystroke
@@ -175,6 +181,20 @@ export default function InvoiceGrid() {
       alert('שגיאה בעדכון הקטגוריה. מרענן נתונים...');
       fetchInvoices();
     }
+  };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('desc'); // Default to desc when clicking a new column
+    }
+  };
+
+  const getSortIcon = (column: string) => {
+    if (sortBy !== column) return '';
+    return sortOrder === 'asc' ? ' ↑' : ' ↓';
   };
 
   return (
@@ -317,10 +337,16 @@ export default function InvoiceGrid() {
             <thead>
               <tr>
                 <th>מקור</th>
-                <th>שם ספק</th>
+                <th onClick={() => handleSort('supplier_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  שם ספק <span style={{ opacity: sortBy === 'supplier_name' ? 1 : 0.3 }}>{getSortIcon('supplier_name') || '↕'}</span>
+                </th>
                 <th>ח.פ/ע.מ</th>
-                <th>תאריך חשבונית</th>
-                <th>סכום כולל</th>
+                <th onClick={() => handleSort('invoice_date')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  תאריך חשבונית <span style={{ opacity: sortBy === 'invoice_date' ? 1 : 0.3 }}>{getSortIcon('invoice_date') || '↕'}</span>
+                </th>
+                <th onClick={() => handleSort('total_amount')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  סכום כולל <span style={{ opacity: sortBy === 'total_amount' ? 1 : 0.3 }}>{getSortIcon('total_amount') || '↕'}</span>
+                </th>
                 <th>מע״מ</th>
                 <th>קטגוריה</th>
                 <th>הותאם</th>
