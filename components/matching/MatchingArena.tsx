@@ -8,6 +8,7 @@ import AutoMatchModal from './AutoMatchModal';
 import ApproveNoInvoiceModal from '../expense-lines/ApproveNoInvoiceModal';
 import ApproveNoExpenseModal from '../invoices/ApproveNoExpenseModal';
 import DirectUploadModal from '../invoices/DirectUploadModal';
+import DeleteExpenseModal from '../expense-lines/DeleteExpenseModal';
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return '—';
@@ -41,6 +42,9 @@ export default function MatchingArena() {
 
   // Approve without invoice state
   const [approvingLine, setApprovingLine] = useState<ExpenseLine | null>(null);
+
+  // Deleting line state
+  const [deletingLine, setDeletingLine] = useState<ExpenseLine | null>(null);
 
   // Approve invoice without expense state
   const [approvingInvoice, setApprovingInvoice] = useState<Invoice | null>(null);
@@ -159,19 +163,32 @@ export default function MatchingArena() {
     setShowAutoMatch(false);
   };
 
-  const handleDeleteLine = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteLineClick = (line: ExpenseLine, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('האם אתה בטוח שברצונך למחוק שורת הוצאה זו?')) return;
+    setDeletingLine(line);
+  };
 
+  const handleConfirmDelete = async (ignoreFuture: boolean) => {
+    if (!deletingLine) return;
     try {
-      const res = await fetch(`/api/expense-lines/${id}`, { method: 'DELETE' });
+      if (ignoreFuture && deletingLine.description) {
+        await fetch('/api/ignored-expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: deletingLine.description })
+        });
+      }
+
+      const res = await fetch(`/api/expense-lines/${deletingLine.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete expense line');
 
-      setExpenseLines(prev => prev.filter(l => l.id !== id));
+      setExpenseLines(prev => prev.filter(l => l.id !== deletingLine.id));
       alert('שורת ההוצאה נמחקה בהצלחה.');
     } catch (error) {
       console.error(error);
       alert('שגיאה במחיקת השורה.');
+    } finally {
+      setDeletingLine(null);
     }
   };
 
@@ -492,7 +509,7 @@ export default function MatchingArena() {
                               {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
                             </button>
                             <button
-                              onClick={(e) => handleDeleteLine(line.id, e)}
+                              onClick={(e) => handleDeleteLineClick(line, e)}
                               title="מחק שורה"
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
                             >
@@ -576,7 +593,7 @@ export default function MatchingArena() {
                         <>
                           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                             <button
-                              onClick={(e) => handleDeleteLine(line.id, e)}
+                              onClick={(e) => handleDeleteLineClick(line, e)}
                               title="מחק שורה"
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
                             >
@@ -722,6 +739,13 @@ export default function MatchingArena() {
         onClose={() => setUploadingLine(null)}
         expenseLine={uploadingLine}
         onUploadSuccess={handleDirectUploadSuccess}
+      />
+
+      <DeleteExpenseModal
+        isOpen={!!deletingLine}
+        onClose={() => setDeletingLine(null)}
+        onConfirm={handleConfirmDelete}
+        expenseLine={deletingLine}
       />
     </>
   );
