@@ -362,7 +362,7 @@ export default function MatchingArena() {
                         <>
                           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                             <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                              ✅ הותאם
+                              {line.status === 'approved_no_invoice' ? '✔️ אושר ללא חשבונית' : '✅ הותאם'}
                             </span>
                             {(() => {
                               const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
@@ -445,7 +445,7 @@ export default function MatchingArena() {
                         <>
                           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                             <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                              ✅ הותאם
+                              {line.status === 'approved_no_invoice' ? '✔️ אושר ללא חשבונית' : '✅ הותאם'}
                             </span>
                             {(() => {
                               const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
