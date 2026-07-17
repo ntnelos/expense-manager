@@ -338,71 +338,73 @@ export default function MatchingArena() {
                     padding: 'var(--space-2)', 
                     background: score > 50 ? 'var(--color-success-muted)' : 'var(--color-bg-secondary)', 
                     border: `1px solid ${score > 50 ? 'var(--color-success)' : 'var(--color-glass-border)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
+                    borderRadius: 'var(--radius-md)'
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
-                      {formatCurrency(line.amount)}
-                      {line.total_amount && line.total_amount !== line.amount && (
-                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
-                          {line.currency !== 'ILS' 
-                            ? `(${line.total_amount} ${line.currency})` 
-                            : `(מתוך ${formatCurrency(line.total_amount)})`
-                          }
-                        </span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
+                        {formatCurrency(line.amount)}
+                        {line.total_amount && line.total_amount !== line.amount && (
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginRight: 'var(--space-2)', fontWeight: 400 }}>
+                            {line.currency !== 'ILS' 
+                              ? `(${line.total_amount} ${line.currency})` 
+                              : `(מתוך ${formatCurrency(line.total_amount)})`
+                            }
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)' }}>{line.description}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
+                        <>
+                          <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                            ✅ הותאם
+                          </span>
+                          {(() => {
+                            const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
+                            return matchObj && matchObj.invoice ? (
+                              <button 
+                                className="btn btn-secondary btn-sm"
+                                onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                              >
+                                📄 צפה בחשבונית
+                              </button>
+                            ) : null;
+                          })()}
+                        </>
+                      ) : (
+                        <>
+                          <button 
+                            className="btn btn-primary btn-sm" 
+                            onClick={() => handleManualMatch(line)}
+                            disabled={matchingLineId === line.id}
+                          >
+                            {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
+                          </button>
+                          <button 
+                            onClick={(e) => handleDeleteLine(line.id, e)}
+                            title="מחק שורה"
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
+                          >
+                            🗑️
+                          </button>
+                        </>
                       )}
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)' }}>{line.description}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                    {line.status === 'approved' || line.status === 'approved_no_invoice' ? (
-                      <>
-                        <span style={{ background: 'var(--color-success-muted)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                          ✅ הותאם
-                        </span>
-                        {(() => {
-                          const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
-                          return matchObj && matchObj.invoice ? (
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
-                            >
-                              📄 צפה בחשבונית
-                            </button>
-                          ) : null;
-                        })()}
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          className="btn btn-primary btn-sm" 
-                          onClick={() => handleManualMatch(line)}
-                          disabled={matchingLineId === line.id}
-                        >
-                          {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
-                        </button>
-                        <button 
-                          className="btn btn-secondary btn-sm"
-                          onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
-                          title="אישור הוצאה ללא דרישת חשבונית"
-                        >
-                          ✔️ אישור ללא חשבונית
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteLine(line.id, e)}
-                          title="מחק שורה"
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
-                        >
-                          🗑️
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  {line.status !== 'approved' && line.status !== 'approved_no_invoice' && (
+                    <div style={{ marginTop: 'var(--space-2)', textAlign: 'right' }}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
+                        style={{ background: 'none', border: 'none', padding: 0, fontSize: '11px', color: 'var(--color-text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        אישור הוצאה ללא חשבונית
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -454,13 +456,6 @@ export default function MatchingArena() {
                       ) : (
                         <>
                           <button 
-                            className="btn btn-secondary btn-sm"
-                            onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
-                            title="אישור הוצאה ללא דרישת חשבונית"
-                          >
-                            ✔️ אישור ללא חשבונית
-                          </button>
-                          <button 
                             onClick={(e) => handleDeleteLine(line.id, e)}
                             title="מחק שורה"
                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.7 }}
@@ -471,6 +466,16 @@ export default function MatchingArena() {
                       )}
                     </div>
                   </div>
+                  {line.status !== 'approved' && line.status !== 'approved_no_invoice' && (
+                    <div style={{ marginTop: 'var(--space-2)', textAlign: 'right' }}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
+                        style={{ background: 'none', border: 'none', padding: 0, fontSize: '11px', color: 'var(--color-text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        אישור הוצאה ללא חשבונית
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )}
