@@ -19,7 +19,8 @@ export interface Invoice {
   vat_amount: number | null;
   matched_amount: number;
   document_type: 'tax_invoice' | 'receipt' | 'tax_invoice_receipt' | 'other' | null;
-  status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error';
+  status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error' | 'approved_no_expense';
+  approval_note?: string;
   raw_ocr_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

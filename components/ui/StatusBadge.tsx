@@ -13,6 +13,7 @@ const STATUS_CONFIG: Record<StatusType, { label: string; className: string }> = 
   approved: { label: 'אושר', className: 'badge-approved' },
   unapproved: { label: 'לא אושר', className: 'badge-unapproved' },
   approved_no_invoice: { label: 'ללא חשבונית', className: 'badge-no-invoice' },
+  approved_no_expense: { label: 'ללא הוצאה', className: 'badge-no-invoice' },
 };
 
 interface StatusBadgeProps {

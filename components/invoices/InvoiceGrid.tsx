@@ -228,6 +228,7 @@ export default function InvoiceGrid() {
               <option value="new">חדש</option>
               <option value="partially_matched">התאמה חלקית</option>
               <option value="fully_matched">הותאם במלואו</option>
+              <option value="approved_no_expense">אושר ללא הוצאה</option>
               <option value="processing">בעיבוד</option>
               <option value="error">שגיאה</option>
             </select>
@@ -401,6 +402,11 @@ export default function InvoiceGrid() {
                   </td>
                   <td>
                     <StatusBadge status={inv.status} />
+                    {(inv as any).approval_note && (
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontStyle: 'italic', marginTop: '4px' }}>
+                        סיבה: {(inv as any).approval_note}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: 'left' }}>
                     <button

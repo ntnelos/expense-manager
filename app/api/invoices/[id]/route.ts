@@ -28,6 +28,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       original_amount: updates.original_amount !== undefined ? updates.original_amount : currentInvoice.original_amount,
       vat_amount: updates.vat_amount !== undefined ? updates.vat_amount : currentInvoice.vat_amount,
       category_id: updates.category_id !== undefined ? updates.category_id : currentInvoice.category_id,
+      status: updates.status !== undefined ? updates.status : currentInvoice.status,
+      approval_note: updates.approval_note !== undefined ? updates.approval_note : currentInvoice.approval_note,
     };
 
     // If it was in error status and now being identified, change status to 'new'

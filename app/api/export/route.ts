@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import * as XLSX from 'xlsx';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const chargeMonth = searchParams.get('chargeMonth');
     const status = searchParams.get('status') || 'approved,approved_no_invoice'; // Default to approved
 
     const statuses = status.split(',');
@@ -18,70 +20,86 @@ export async function GET(req: Request) {
       .in('status', statuses)
       .order('transaction_date', { ascending: false });
 
-    if (startDate) {
-      query = query.gte('transaction_date', startDate);
-    }
-    if (endDate) {
-      query = query.lte('transaction_date', endDate);
+    if (chargeMonth) {
+      // chargeMonth is YYYY-MM
+      const startDateQuery = `${chargeMonth}-01`;
+      const endYear = parseInt(chargeMonth.split('-')[0]);
+      const endMonth = parseInt(chargeMonth.split('-')[1]);
+      const nextMonth = endMonth === 12 ? 1 : endMonth + 1;
+      const nextYear = endMonth === 12 ? endYear + 1 : endYear;
+      const endDateQuery = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
+      
+      // we check if charge_date is within the month. 
+      // If charge_date is null, we fallback to transaction_date.
+      query = query.or(`and(charge_date.gte.${startDateQuery},charge_date.lt.${endDateQuery}),and(charge_date.is.null,transaction_date.gte.${startDateQuery},transaction_date.lt.${endDateQuery})`);
+    } else {
+      if (startDate) {
+        query = query.gte('transaction_date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('transaction_date', endDate);
+      }
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
 
-    // Build CSV
-    const headers = [
-      'תאריך עסקה',
-      'תאריך חיוב',
-      'סכום חיוב',
-      'סכום עסקה',
-      'פירוט בנק',
-      'קטגוריה מקורית',
-      'שם ספק (מחשבונית)',
-      'ח.פ/עוסק (מחשבונית)',
-      'קישור לחשבונית',
-    ];
-
-    const escapeCSV = (str: any) => {
-      if (str == null) return '';
-      const stringified = String(str);
-      // Double up any quotes and wrap in quotes if there are commas or quotes
-      if (stringified.includes(',') || stringified.includes('"') || stringified.includes('\n')) {
-        return `"${stringified.replace(/"/g, '""')}"`;
-      }
-      return stringified;
-    };
-
-    const csvRows = [headers.join(',')];
+    // Build Excel Rows
+    const excelRows: any[] = [];
 
     for (const line of data || []) {
-      // Find the best match if there are multiple (usually there's only one)
-      const match = line.matches?.[0];
-      const invoice = match?.invoices;
-
-      const row = [
-        line.transaction_date,
-        line.charge_date || '',
-        line.amount,
-        line.total_amount || line.amount,
-        line.description || '',
-        line.original_category || '',
-        invoice?.supplier_name || '',
-        invoice?.supplier_tax_id || '',
-        invoice?.drive_file_url || '',
-      ];
-
-      csvRows.push(row.map(escapeCSV).join(','));
+      const matches = line.matches || [];
+      
+      // If no matches, or just one match, or approved without invoice
+      if (matches.length === 0) {
+        excelRows.push({
+          'תאריך עסקה': line.transaction_date || '',
+          'תאריך חיוב': line.charge_date || '',
+          'סכום חיוב': line.amount || '',
+          'סכום עסקה': line.total_amount || line.amount || '',
+          'פירוט בנק': line.description || '',
+          'קטגוריה מקורית': line.original_category || '',
+          'שם ספק (מחשבונית)': '',
+          'ח.פ/עוסק (מחשבונית)': '',
+          'קישור לחשבונית': '',
+          'סיבת אישור': line.approval_note || ''
+        });
+      } else {
+        // Iterate through all matches for this expense line
+        matches.forEach((match: any, index: number) => {
+          const invoice = match.invoices;
+          const isDuplicate = index > 0;
+          
+          excelRows.push({
+            'תאריך עסקה': line.transaction_date || '',
+            'תאריך חיוב': line.charge_date || '',
+            'סכום חיוב': isDuplicate ? `${line.amount} (העתק)` : line.amount,
+            'סכום עסקה': line.total_amount || line.amount || '',
+            'פירוט בנק': isDuplicate ? `${line.description} (העתק)` : line.description,
+            'קטגוריה מקורית': line.original_category || '',
+            'שם ספק (מחשבונית)': invoice?.supplier_name || '',
+            'ח.פ/עוסק (מחשבונית)': invoice?.supplier_tax_id || '',
+            'קישור לחשבונית': invoice?.drive_file_url || '',
+            'סיבת אישור': line.approval_note || ''
+          });
+        });
+      }
     }
 
-    // Add BOM for Excel Hebrew support
-    const csvContent = '\uFEFF' + csvRows.join('\n');
+    // Create a new workbook and worksheet
+    const worksheet = XLSX.utils.json_to_sheet(excelRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
 
-    return new NextResponse(csvContent, {
+    // Generate buffer
+    const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    return new NextResponse(buf, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="expense_export_${new Date().toISOString().split('T')[0]}.csv"`,
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="expense_export_${new Date().toISOString().split('T')[0]}.xlsx"`,
       },
     });
   } catch (err: any) {
