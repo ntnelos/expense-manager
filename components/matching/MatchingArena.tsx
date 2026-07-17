@@ -387,11 +387,11 @@ export default function MatchingArena() {
                           {matchingLineId === line.id ? 'מתאים...' : '🔗 בצע התאמה'}
                         </button>
                         <button 
+                          className="btn btn-secondary btn-sm"
                           onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
-                          title="אישור ללא חשבונית"
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.8 }}
+                          title="אישור הוצאה ללא דרישת חשבונית"
                         >
-                          ✔️
+                          ✔️ אישור ללא חשבונית
                         </button>
                         <button 
                           onClick={(e) => handleDeleteLine(line.id, e)}
@@ -454,11 +454,11 @@ export default function MatchingArena() {
                       ) : (
                         <>
                           <button 
+                            className="btn btn-secondary btn-sm"
                             onClick={(e) => { e.stopPropagation(); setApprovingLine(line); }}
-                            title="אישור ללא חשבונית"
-                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', opacity: 0.8 }}
+                            title="אישור הוצאה ללא דרישת חשבונית"
                           >
-                            ✔️
+                            ✔️ אישור ללא חשבונית
                           </button>
                           <button 
                             onClick={(e) => handleDeleteLine(line.id, e)}
