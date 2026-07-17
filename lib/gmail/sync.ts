@@ -249,7 +249,23 @@ export async function syncGmailInvoices() {
           
           // 5. Assign category
           let categoryId = null;
-          if (ocrResult.suggested_category) {
+          
+          if (ocrResult.supplier_name) {
+            const { data: previousVendorInvoice } = await supabase
+              .from('invoices')
+              .select('category_id')
+              .eq('supplier_name', ocrResult.supplier_name)
+              .not('category_id', 'is', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (previousVendorInvoice && previousVendorInvoice.category_id) {
+              categoryId = previousVendorInvoice.category_id;
+            }
+          }
+
+          if (!categoryId && ocrResult.suggested_category) {
             const { data: matchedCategory } = await supabase
               .from('categories')
               .select('id')

@@ -150,7 +150,26 @@ export async function POST(req: Request) {
 
     // 8. Assign category
     let categoryId = null;
-    if (ocrResult.suggested_category) {
+    let categoryName = ocrResult.suggested_category;
+
+    if (ocrResult.supplier_name) {
+      const { data: previousVendorInvoice } = await supabase
+        .from('invoices')
+        .select('category_id, categories(name)')
+        .eq('supplier_name', ocrResult.supplier_name)
+        .not('category_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (previousVendorInvoice && previousVendorInvoice.category_id) {
+        categoryId = previousVendorInvoice.category_id;
+        // @ts-ignore
+        if (previousVendorInvoice.categories?.name) categoryName = previousVendorInvoice.categories.name;
+      }
+    }
+
+    if (!categoryId && ocrResult.suggested_category) {
       const { data: matchedCategory } = await supabase
         .from('categories')
         .select('id')
@@ -195,7 +214,7 @@ export async function POST(req: Request) {
     const summary = `✅ החשבונית נקלטה בהצלחה!\n\n` +
       `🏢 ספק: ${ocrResult.supplier_name || 'לא זוהה'}\n` +
       `💰 סכום: ${ocrResult.total_amount ? '₪' + ocrResult.total_amount : 'לא זוהה'}\n` +
-      `📁 קטגוריה: ${ocrResult.suggested_category || 'לא זוהה'}\n\n` +
+      `📁 קטגוריה: ${categoryName || 'לא זוהה'}\n\n` +
       `החשבונית ממתינה להתאמה במערכת.`;
       
     await sendMessage(chatId, summary);
