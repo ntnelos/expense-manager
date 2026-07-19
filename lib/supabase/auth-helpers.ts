@@ -66,7 +66,7 @@ export async function updateSession(request: NextRequest) {
   const isWebhook = request.nextUrl.pathname === '/api/import/gmail/webhook' || 
                     request.nextUrl.pathname === '/api/import/gmail/auth/callback' ||
                     request.nextUrl.pathname === '/api/import/gmail/config' || // we might need this protected actually, but it's okay for now
-                    request.nextUrl.pathname.startsWith('/api/telegram');
+                    request.nextUrl.pathname.startsWith('/api/webhooks/telegram');
 
   if (!user && !isAuthPage && !isWebhook) {
     const url = request.nextUrl.clone();
