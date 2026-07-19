@@ -108,6 +108,7 @@ export async function PATCH(request: Request) {
       'category_id',
       'currency',
       'original_amount',
+      'rotation_angle',
     ];
 
     for (const key of allowedKeys) {
