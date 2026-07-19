@@ -345,6 +345,9 @@ export default function InvoiceGrid() {
                 <th onClick={() => handleSort('invoice_date')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                   תאריך חשבונית <span style={{ opacity: sortBy === 'invoice_date' ? 1 : 0.3 }}>{getSortIcon('invoice_date') || '↕'}</span>
                 </th>
+                <th onClick={() => handleSort('created_at')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  תאריך העלאה <span style={{ opacity: sortBy === 'created_at' ? 1 : 0.3 }}>{getSortIcon('created_at') || '↕'}</span>
+                </th>
                 <th onClick={() => handleSort('total_amount')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                   סכום כולל <span style={{ opacity: sortBy === 'total_amount' ? 1 : 0.3 }}>{getSortIcon('total_amount') || '↕'}</span>
                 </th>
@@ -369,6 +372,7 @@ export default function InvoiceGrid() {
                   <td style={{ fontWeight: 600 }}>{inv.supplier_name || '—'}</td>
                   <td>{inv.supplier_tax_id || '—'}</td>
                   <td className="table-date">{formatToIsraeliDate(inv.invoice_date)}</td>
+                  <td className="table-date" style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>{formatToIsraeliDate(inv.created_at)}</td>
                   <td className="table-amount">{formatCurrency(inv.total_amount)}</td>
                   <td className="table-amount" style={{ color: 'var(--color-text-secondary)' }}>
                     {formatCurrency(inv.vat_amount)}

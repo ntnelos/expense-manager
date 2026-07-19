@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { getFile, downloadFile, sendMessage } from '@/lib/telegram/bot';
 import { extractInvoiceFromImage, extractInvoiceFromPDF } from '@/lib/ocr/extract';
 import { generateSHA256Hash } from '@/lib/utils/hash';
-import { uploadToGoogleDrive } from '@/lib/google/drive';
+import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 
 export async function POST(req: Request) {
   try {
@@ -146,6 +146,24 @@ export async function POST(req: Request) {
     if (ocrResult.is_credit_note) {
       await sendMessage(chatId, `⚠️ הקובץ זוהה כחשבונית זיכוי/קבלה ולכן לא נשמר במערכת (המערכת כרגע לא תומכת בזיכויים).`);
       return NextResponse.json({ success: true });
+    }
+
+    // 7.5 Semantic Duplicate Check
+    if (ocrResult.supplier_name && ocrResult.invoice_number) {
+      const { data: semanticDuplicate } = await supabase
+        .from('invoices')
+        .select('id, supplier_name, invoice_number, total_amount')
+        .eq('supplier_name', ocrResult.supplier_name)
+        .eq('invoice_number', ocrResult.invoice_number)
+        .maybeSingle();
+
+      if (semanticDuplicate) {
+        if (driveResult && driveResult.fileId) {
+          await deleteFromGoogleDrive(driveResult.fileId).catch(console.error);
+        }
+        await sendMessage(chatId, `⚠️ חשבונית זו כבר קיימת במערכת!\n(ספק: ${semanticDuplicate.supplier_name}, מספר חשבונית: ${semanticDuplicate.invoice_number}, סכום: ₪${semanticDuplicate.total_amount}).`);
+        return NextResponse.json({ success: true });
+      }
     }
 
     // 8. Assign category
