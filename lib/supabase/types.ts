@@ -22,6 +22,7 @@ export interface Invoice {
   status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error' | 'approved_no_expense';
   approval_note?: string;
   raw_ocr_data: Record<string, unknown> | null;
+  rotation_angle: number;
   created_at: string;
   updated_at: string;
 }

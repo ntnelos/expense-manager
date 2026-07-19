@@ -469,6 +469,11 @@ export default function InvoiceGrid() {
         invoice={selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
         onUpdate={handleInvoiceUpdate}
+        onDelete={(id) => {
+          setInvoices((prev) => prev.filter((inv) => inv.id !== id));
+          setTotalCount((prev) => prev - 1);
+          setSelectedInvoice(null);
+        }}
       />
     </div>
   );

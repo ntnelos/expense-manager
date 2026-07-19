@@ -30,6 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       category_id: updates.category_id !== undefined ? updates.category_id : currentInvoice.category_id,
       status: updates.status !== undefined ? updates.status : currentInvoice.status,
       approval_note: updates.approval_note !== undefined ? updates.approval_note : currentInvoice.approval_note,
+      rotation_angle: updates.rotation_angle !== undefined ? updates.rotation_angle : currentInvoice.rotation_angle,
     };
 
     // If it was in error status and now being identified, change status to 'new'

@@ -16,9 +16,10 @@ interface InvoiceDetailDrawerProps {
   invoice: Invoice | null;
   onClose: () => void;
   onUpdate: (updatedInvoice: Invoice) => void;
+  onDelete?: (id: string) => void;
 }
 
-export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: InvoiceDetailDrawerProps) {
+export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDelete }: InvoiceDetailDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<Invoice>>({}); 
   const [saving, setSaving] = useState(false);
@@ -50,6 +51,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
         document_type: invoice.document_type || 'other',
         currency: invoice.currency || 'ILS',
         original_amount: invoice.original_amount || 0,
+        rotation_angle: invoice.rotation_angle || 0,
       });
       setSelectedCategoryId((invoice as any).category_id || '');
       // Small timeout to allow transition
@@ -109,6 +111,22 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
       setError(err.message || 'אירעה שגיאה בעת שמירת השינויים בחשבונית.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('האם אתה בטוח שברצונך למחוק חשבונית זו? הקובץ המקושר ב-Google Drive יימחק גם הוא.')) return;
+    try {
+      const res = await fetch(`/api/invoices?id=${invoice.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('שגיאה במחיקת החשבונית.');
+      
+      const data = await res.json();
+      if (data.success) {
+        if (onDelete) onDelete(invoice.id);
+        handleClose();
+      }
+    } catch (err: any) {
+      alert('שגיאה במחיקת מסמך החשבונית: ' + err.message);
     }
   };
 
@@ -241,25 +259,53 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               📄 {invoice.original_filename || 'מסמך חשבונית'}
             </div>
-            <a
-              href={invoice.drive_file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary btn-sm"
-            >
-              🔗 פתח ב-Drive
-            </a>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm btn-icon"
+                onClick={() => setFormData(prev => ({ ...prev, rotation_angle: ((prev.rotation_angle || 0) - 90) % 360 }))}
+                title="סובב שמאלה"
+              >
+                ↺
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm btn-icon"
+                onClick={() => setFormData(prev => ({ ...prev, rotation_angle: ((prev.rotation_angle || 0) + 90) % 360 }))}
+                title="סובב ימינה"
+              >
+                ↻
+              </button>
+              <a
+                href={invoice.drive_file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+              >
+                🔗 פתח ב-Drive
+              </a>
+            </div>
           </div>
 
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <iframe
-              src={getEmbedUrl(invoice.drive_file_url)}
-              width="100%"
-              height="100%"
-              style={{ border: 'none', background: '#151d30' }}
-              title="Invoice Preview"
-              allow="autoplay"
-            />
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyItems: 'center', background: '#151d30' }}>
+            <div style={{ 
+              width: '100%', 
+              height: '100%',
+              transform: `rotate(${formData.rotation_angle || 0}deg)`,
+              transition: 'transform 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <iframe
+                src={getEmbedUrl(invoice.drive_file_url)}
+                width="100%"
+                height="100%"
+                style={{ border: 'none', background: '#151d30' }}
+                title="Invoice Preview"
+                allow="autoplay"
+              />
+            </div>
           </div>
         </div>
 
@@ -557,9 +603,14 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate }: Invo
               zIndex: 10,
             }}
           >
-            <button className="btn btn-secondary" onClick={handleClose} disabled={saving}>
-              ביטול
-            </button>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button className="btn btn-secondary" onClick={handleClose} disabled={saving}>
+                ביטול
+              </button>
+              <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleDelete} disabled={saving}>
+                🗑️ מחיקה
+              </button>
+            </div>
             <button className="btn btn-primary" onClick={() => handleSave(false)} disabled={saving}>
               {saving ? 'שומר...' : 'שמור שינויים'}
             </button>
