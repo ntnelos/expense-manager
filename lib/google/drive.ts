@@ -73,7 +73,7 @@ async function getOrCreateFolder(drive: any, folderName: string, parentId?: stri
 /**
  * Returns the target folder ID for a given date and status in "Expense Manager/YYYY/MM/status" format.
  */
-async function getTargetFolderId(drive: any, date: Date, status: 'matched' | 'not_matched' | 'error'): Promise<string> {
+async function getTargetFolderId(drive: any, date: Date, status?: 'matched' | 'not_matched' | 'error'): Promise<string> {
   const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID; // Optional root folder
   
   // 1. Get or create "Expense Manager" root if rootFolderId is not specified
@@ -90,10 +90,8 @@ async function getTargetFolderId(drive: any, date: Date, status: 'matched' | 'no
   const monthStr = (date.getMonth() + 1).toString().padStart(2, '0');
   const monthFolderId = await getOrCreateFolder(drive, monthStr, yearFolderId);
 
-  // 4. Get or create status folder ("matched" or "not_matched")
-  const statusFolderId = await getOrCreateFolder(drive, status, monthFolderId);
-
-  return statusFolderId;
+  // We no longer organize by status (matched/not_matched), everything stays in the month folder.
+  return monthFolderId;
 }
 
 /**
@@ -185,30 +183,10 @@ export async function moveInvoiceDriveStatus(
   date: Date, 
   newStatus: 'matched' | 'not_matched' | 'error'
 ): Promise<void> {
-  const drive = getDriveClient();
-  try {
-    // 1. Get the current parents of the file
-    const file = await drive.files.get({
-      fileId: fileId,
-      fields: 'parents'
-    });
-    const previousParents = file.data.parents?.join(',') || '';
-
-    // 2. Get target folder for the new status
-    const targetFolderId = await getTargetFolderId(drive, date, newStatus);
-
-    // 3. Move the file
-    await drive.files.update({
-      fileId: fileId,
-      addParents: targetFolderId,
-      removeParents: previousParents,
-      fields: 'id, parents'
-    });
-    console.log(`Successfully moved Drive file ${fileId} to ${newStatus}`);
-  } catch (err: any) {
-    console.error(`Failed to move Drive file ${fileId} to ${newStatus}:`, err);
-    throw err;
-  }
+  // Drive logic changed: we no longer move files between status folders.
+  // Files stay in their Year/Month folder.
+  console.log(`moveInvoiceDriveStatus called for ${fileId}, but moving files is now disabled.`);
+  return Promise.resolve();
 }
 
 /**

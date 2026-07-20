@@ -26,6 +26,7 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [matchedLines, setMatchedLines] = useState<any[]>([]);
   
   // Inline Alias States
   const [showAliasForm, setShowAliasForm] = useState(false);
@@ -54,9 +55,25 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
         rotation_angle: invoice.rotation_angle || 0,
       });
       setSelectedCategoryId((invoice as any).category_id || '');
+
+      // Fetch matched lines if matched
+      if (invoice.status === 'fully_matched' || invoice.status === 'partially_matched') {
+        fetch(`/api/matches?invoiceId=${invoice.id}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.matches) {
+              setMatchedLines(data.matches.map((m: any) => m.expense_line).filter(Boolean));
+            }
+          })
+          .catch(console.error);
+      } else {
+        setMatchedLines([]);
+      }
+
       // Small timeout to allow transition
       setTimeout(() => setIsOpen(true), 50);
     } else {
+      setMatchedLines([]);
       setIsOpen(false);
     }
   }, [invoice]);
@@ -587,6 +604,33 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
                 </div>
               </div>
             </div>
+
+            {/* Matched Expense Lines */}
+            {matchedLines.length > 0 && (
+              <div style={{ marginTop: 'var(--space-6)' }}>
+                <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700, marginBottom: 'var(--space-3)' }}>שורות הוצאה שהותאמו</h3>
+                {matchedLines.map((line, idx) => (
+                  <div key={line.id || idx} style={{
+                    padding: 'var(--space-3)',
+                    background: 'var(--color-bg-tertiary)',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: 'var(--space-2)',
+                    fontSize: 'var(--font-size-sm)',
+                    border: '1px solid var(--color-glass-border)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
+                      <span>{line.description}</span>
+                      <span style={{ color: 'var(--color-accent)' }}>
+                        {new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(line.amount)}
+                      </span>
+                    </div>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                      תאריך עסקה: {formatToIsraeliDate(line.transaction_date)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Footer Actions */}

@@ -4,11 +4,20 @@ import { moveInvoiceDriveStatus } from '@/lib/google/drive';
 
 export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const invoiceId = searchParams.get('invoiceId');
+
     const supabase = createServerClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('matches')
       .select('*, invoice:invoices(*), expense_line:expense_lines(*)')
       .order('created_at', { ascending: false });
+
+    if (invoiceId) {
+      query = query.eq('invoice_id', invoiceId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return NextResponse.json({ matches: data || [] });

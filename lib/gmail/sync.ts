@@ -236,11 +236,11 @@ export async function syncGmailInvoices() {
           if (skip) continue;
           
           // 4. Upload to Google Drive (only if we decided to keep it)
-          // Smart renaming: Supplier Name - Invoice Date
+          // Smart renaming: Supplier_InvoiceDate.extension
           const extension = filename.split('.').pop() || 'pdf';
-          const supplier = ocrResult.supplier_name ? ocrResult.supplier_name.replace(/[\/\\?%*:|"<>]/g, '') : 'Unknown';
+          const supplier = ocrResult.supplier_name ? ocrResult.supplier_name.replace(/[^a-zA-Z0-9א-ת ]/g, '').trim() : 'Unknown';
           const invoiceDate = ocrResult.invoice_date || new Date().toISOString().split('T')[0];
-          const newFilename = `${supplier} - ${invoiceDate}.${extension}`;
+          const newFilename = `${supplier}_${invoiceDate}.${extension}`;
           
           console.log(`[Gmail Sync] Uploading ${newFilename} to Google Drive...`);
           // Note: for email sync, if OCR succeeded, it's not error status. If it failed, it threw. 

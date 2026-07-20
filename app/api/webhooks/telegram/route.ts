@@ -113,32 +113,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // 6. Upload to Drive
-    let driveResult;
-    try {
-      console.log('[Telegram] Step 6: Uploading to Google Drive...');
-      const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
-      driveResult = await uploadToGoogleDrive(fileBuffer, fileName, mimeType, new Date());
-      console.log('[Telegram] Step 6: Drive upload success, fileId:', driveResult.fileId);
-    } catch (err: any) {
-      console.error('[Telegram] Step 6 FAILED (Drive):', err);
-      await sendMessage(chatId, `❌ שגיאה בהעלאה ל-Google Drive: ${err.message?.substring(0, 200)}`);
-      return NextResponse.json({ success: true });
-    }
-
-    // 7. Run OCR
+    // 6. Run OCR FIRST so we can construct a nice filename
     let ocrResult;
     try {
-      console.log('[Telegram] Step 7: Running OCR...');
+      console.log('[Telegram] Step 6: Running OCR...');
       const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
       if (isPDF) {
         ocrResult = await extractInvoiceFromPDF(fileBuffer);
       } else {
         ocrResult = await extractInvoiceFromImage(fileBuffer, mimeType);
       }
-      console.log('[Telegram] Step 7: OCR success, supplier:', ocrResult.supplier_name);
+      console.log('[Telegram] Step 6: OCR success, supplier:', ocrResult.supplier_name);
     } catch (ocrErr: any) {
-      console.error('[Telegram] Step 7 FAILED (OCR):', ocrErr);
+      console.error('[Telegram] Step 6 FAILED (OCR):', ocrErr);
       await sendMessage(chatId, `❌ שגיאה בפענוח AI: ${ocrErr.message?.substring(0, 200)}`);
       return NextResponse.json({ success: true });
     }
@@ -148,7 +135,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // 7.5 Semantic Duplicate Check
+    // 6.5 Semantic Duplicate Check
     if (ocrResult.supplier_name && ocrResult.invoice_number) {
       const { data: semanticDuplicate } = await supabase
         .from('invoices')
@@ -158,13 +145,31 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (semanticDuplicate) {
-        if (driveResult && driveResult.fileId) {
-          await deleteFromGoogleDrive(driveResult.fileId).catch(console.error);
-        }
         await sendMessage(chatId, `⚠️ חשבונית זו כבר קיימת במערכת!\n(ספק: ${semanticDuplicate.supplier_name}, מספר חשבונית: ${semanticDuplicate.invoice_number}, סכום: ₪${semanticDuplicate.total_amount}).`);
         return NextResponse.json({ success: true });
       }
     }
+
+    // 7. Upload to Drive with dynamic filename
+    let driveResult;
+    try {
+      console.log('[Telegram] Step 7: Uploading to Google Drive...');
+      const supplierPart = (ocrResult.supplier_name || 'unknown').replace(/[^a-zA-Z0-9א-ת ]/g, '').trim();
+      const datePart = ocrResult.invoice_date || new Date().toISOString().split('T')[0];
+      const extension = isPDF ? 'pdf' : 'jpg';
+      const dynamicFileName = `${supplierPart}_${datePart}.${extension}`;
+      
+      const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
+      driveResult = await uploadToGoogleDrive(fileBuffer, dynamicFileName, mimeType, new Date());
+      console.log('[Telegram] Step 7: Drive upload success, fileId:', driveResult.fileId);
+      fileName = dynamicFileName; // update the variable to save in DB
+    } catch (err: any) {
+      console.error('[Telegram] Step 7 FAILED (Drive):', err);
+      await sendMessage(chatId, `❌ שגיאה בהעלאה ל-Google Drive: ${err.message?.substring(0, 200)}`);
+      return NextResponse.json({ success: true });
+    }
+
+
 
     // 8. Assign category
     let categoryId = null;

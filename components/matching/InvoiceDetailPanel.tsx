@@ -41,6 +41,8 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
   const isOpen = !!invoice;
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [matchedLines, setMatchedLines] = useState<any[]>([]);
+
   
   const [formData, setFormData] = useState({
     supplier_name: '',
@@ -62,6 +64,22 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
       });
       // Auto-open edit mode if it's an error invoice
       setIsEditing(invoice.status === 'error');
+
+      // Fetch matched expense lines if matched
+      if (invoice.status === 'fully_matched' || invoice.status === 'partially_matched') {
+        fetch(`/api/matches?invoiceId=${invoice.id}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.matches) {
+              setMatchedLines(data.matches.map((m: any) => m.expense_line).filter(Boolean));
+            }
+          })
+          .catch(console.error);
+      } else {
+        setMatchedLines([]);
+      }
+    } else {
+      setMatchedLines([]);
     }
   }, [invoice]);
 
@@ -258,6 +276,30 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                 <span style={{ ...valueStyle, fontSize: '11px' }}>{invoice.original_filename || '—'}</span>
               </div>
             </div>
+
+            {/* Matched Expense Lines */}
+            {matchedLines.length > 0 && (
+              <div className="detail-card" style={{ marginTop: 'var(--space-4)' }}>
+                <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700, marginBottom: 'var(--space-3)' }}>שורות הוצאה שהותאמו</h3>
+                {matchedLines.map((line, idx) => (
+                  <div key={line.id || idx} style={{
+                    padding: 'var(--space-2)',
+                    background: 'var(--color-bg-tertiary)',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: 'var(--space-2)',
+                    fontSize: 'var(--font-size-xs)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                      <span>{line.description}</span>
+                      <span>{formatCurrency(line.amount)}</span>
+                    </div>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '11px', marginTop: '2px' }}>
+                      תאריך עסקה: {formatToIsraeliDate(line.transaction_date)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

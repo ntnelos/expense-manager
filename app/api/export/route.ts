@@ -16,8 +16,17 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from('expense_lines')
-      .select('*, matches(*, invoice:invoices(*))')
+      .select('*, matches(*, invoice:invoices(*, categories(name)))')
       .order('transaction_date', { ascending: false });
+
+    const translateStatus = (status: string) => {
+      switch (status) {
+        case 'unapproved': return 'ממתין';
+        case 'approved': return 'הותאם';
+        case 'approved_no_invoice': return 'אושר ללא חשבונית';
+        default: return status || '';
+      }
+    };
 
     if (statuses.length > 0) {
       query = query.in('status', statuses);
@@ -71,6 +80,8 @@ export async function GET(req: Request) {
           'סכום חשבונית': '',
           'מטבע חשבונית': '',
           'מע״מ (חשבונית)': '',
+          'קטגוריה': '',
+          'סטטוס התאמה': translateStatus(line.status),
           'קישור לחשבונית': '',
         });
       } else {
@@ -93,6 +104,8 @@ export async function GET(req: Request) {
             'סכום חשבונית': invoice?.total_amount || '',
             'מטבע חשבונית': invoice?.currency || '',
             'מע״מ (חשבונית)': invoice?.vat_amount || '',
+            'קטגוריה': invoice?.categories?.name || '',
+            'סטטוס התאמה': translateStatus(line.status),
             'קישור לחשבונית': invoice?.drive_file_url || '',
           });
         });
