@@ -572,7 +572,7 @@ export default function MatchingArena() {
           />
           <button
             className="btn btn-secondary"
-            onClick={() => window.open(`/api/export?chargeMonth=${chargeMonth}`, '_blank')}
+            onClick={() => window.open(`/api/export?chargeMonth=${chargeMonth}&status=all`, '_blank')}
             title="יצוא לאקסל עבור חודש החיוב הנוכחי"
           >
             📊 ייצא לרו״ח

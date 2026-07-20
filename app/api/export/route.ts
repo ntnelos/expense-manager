@@ -8,17 +8,20 @@ export async function GET(req: Request) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const chargeMonth = searchParams.get('chargeMonth');
-    const status = searchParams.get('status') || 'approved,approved_no_invoice'; // Default to approved
+    const status = searchParams.get('status') || 'approved,approved_no_invoice'; // Default to approved unless "all"
 
-    const statuses = status.split(',');
+    const statuses = status !== 'all' ? status.split(',') : [];
 
     const supabase = createServerClient();
 
     let query = supabase
       .from('expense_lines')
       .select('*, matches(*, invoice:invoices(*))')
-      .in('status', statuses)
       .order('transaction_date', { ascending: false });
+
+    if (statuses.length > 0) {
+      query = query.in('status', statuses);
+    }
 
     if (chargeMonth) {
       // chargeMonth is YYYY-MM
@@ -55,16 +58,20 @@ export async function GET(req: Request) {
       // If no matches, or just one match, or approved without invoice
       if (matches.length === 0) {
         excelRows.push({
-          'תאריך עסקה': line.transaction_date || '',
-          'תאריך חיוב': line.charge_date || '',
-          'סכום חיוב': line.amount || '',
-          'סכום עסקה': line.total_amount || line.amount || '',
-          'פירוט בנק': line.description || '',
-          'קטגוריה מקורית': line.original_category || '',
-          'שם ספק (מחשבונית)': '',
-          'ח.פ/עוסק (מחשבונית)': '',
+          'תאריך עסקה (הוצאה)': line.transaction_date || '',
+          'תאריך חיוב (הוצאה)': line.charge_date || '',
+          'סכום חיוב (הוצאה)': line.amount || '',
+          'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
+          'פירוט בנק (הוצאה)': line.description || '',
+          'הערה / סיבת אישור': line.approval_note || '',
+          'שם ספק (חשבונית)': '',
+          'ח.פ/עוסק (חשבונית)': '',
+          'מספר חשבונית': '',
+          'תאריך חשבונית': '',
+          'סכום חשבונית': '',
+          'מטבע חשבונית': '',
+          'מע״מ (חשבונית)': '',
           'קישור לחשבונית': '',
-          'סיבת אישור': line.approval_note || ''
         });
       } else {
         // Iterate through all matches for this expense line
@@ -73,16 +80,20 @@ export async function GET(req: Request) {
           const isDuplicate = index > 0;
           
           excelRows.push({
-            'תאריך עסקה': line.transaction_date || '',
-            'תאריך חיוב': line.charge_date || '',
-            'סכום חיוב': isDuplicate ? `${line.amount} (העתק)` : line.amount,
-            'סכום עסקה': line.total_amount || line.amount || '',
-            'פירוט בנק': isDuplicate ? `${line.description} (העתק)` : line.description,
-            'קטגוריה מקורית': line.original_category || '',
-            'שם ספק (מחשבונית)': invoice?.supplier_name || '',
-            'ח.פ/עוסק (מחשבונית)': invoice?.supplier_tax_id || '',
+            'תאריך עסקה (הוצאה)': line.transaction_date || '',
+            'תאריך חיוב (הוצאה)': line.charge_date || '',
+            'סכום חיוב (הוצאה)': isDuplicate ? `${line.amount} (העתק)` : line.amount,
+            'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
+            'פירוט בנק (הוצאה)': isDuplicate ? `${line.description} (העתק)` : line.description,
+            'הערה / סיבת אישור': line.approval_note || '',
+            'שם ספק (חשבונית)': invoice?.supplier_name || '',
+            'ח.פ/עוסק (חשבונית)': invoice?.supplier_tax_id || '',
+            'מספר חשבונית': invoice?.invoice_number || '',
+            'תאריך חשבונית': invoice?.invoice_date || '',
+            'סכום חשבונית': invoice?.total_amount || '',
+            'מטבע חשבונית': invoice?.currency || '',
+            'מע״מ (חשבונית)': invoice?.vat_amount || '',
             'קישור לחשבונית': invoice?.drive_file_url || '',
-            'סיבת אישור': line.approval_note || ''
           });
         });
       }
