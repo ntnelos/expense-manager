@@ -21,6 +21,29 @@ function formatCurrency(amount: number | null): string {
   }).format(amount);
 }
 
+type StatusTab = 'pending' | 'matched' | 'error' | 'all';
+
+const STATUS_TAB_MAP: Record<StatusTab, string> = {
+  pending: 'new,partially_matched',
+  matched: 'fully_matched,approved_no_expense',
+  error: 'error',
+  all: '',
+};
+
+const STATUS_TAB_LABELS: Record<StatusTab, string> = {
+  pending: 'ממתין',
+  matched: 'הותאם',
+  error: 'שגיאה',
+  all: 'הכל',
+};
+
+const STATUS_TAB_ICONS: Record<StatusTab, string> = {
+  pending: '⏳',
+  matched: '✅',
+  error: '⚠️',
+  all: '📋',
+};
+
 export default function InvoiceGrid() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -31,7 +54,7 @@ export default function InvoiceGrid() {
 
   // Filters State
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [activeTab, setActiveTab] = useState<StatusTab>('pending');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [minAmount, setMinAmount] = useState('');
@@ -45,6 +68,9 @@ export default function InvoiceGrid() {
   // Categories
   const [categories, setCategories] = useState<Category[]>([]);
 
+  // Tab counts
+  const [tabCounts, setTabCounts] = useState<Record<StatusTab, number>>({ pending: 0, matched: 0, error: 0, all: 0 });
+
   // Selected Invoice for Drawer
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
@@ -56,9 +82,37 @@ export default function InvoiceGrid() {
       .catch(console.error);
   }, []);
 
+  // Fetch tab counts
+  const fetchTabCounts = useCallback(async () => {
+    try {
+      const tabs: StatusTab[] = ['pending', 'matched', 'error', 'all'];
+      const counts: Record<StatusTab, number> = { pending: 0, matched: 0, error: 0, all: 0 };
+      
+      await Promise.all(tabs.map(async (tab) => {
+        const statusParam = STATUS_TAB_MAP[tab];
+        const params = new URLSearchParams({ limit: '1', page: '1' });
+        if (statusParam) params.set('status', statusParam);
+        const res = await fetch(`/api/invoices?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          counts[tab] = data.count || 0;
+        }
+      }));
+
+      setTabCounts(counts);
+    } catch (err) {
+      console.error('Error fetching tab counts', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTabCounts();
+  }, [fetchTabCounts]);
+
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
+      const status = STATUS_TAB_MAP[activeTab];
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -86,10 +140,9 @@ export default function InvoiceGrid() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, dateFrom, dateTo, minAmount, maxAmount, categoryId, sortBy, sortOrder]);
+  }, [page, limit, search, activeTab, dateFrom, dateTo, minAmount, maxAmount, categoryId, sortBy, sortOrder]);
 
   useEffect(() => {
-    // Debounce search filter updates to prevent hitting the API on every keystroke
     const handler = setTimeout(() => {
       fetchInvoices();
     }, 300);
@@ -97,12 +150,10 @@ export default function InvoiceGrid() {
     return () => clearTimeout(handler);
   }, [fetchInvoices]);
 
-  // Handle updates made inside the details drawer
   const handleInvoiceUpdate = (updatedInvoice: Invoice) => {
     setInvoices((prev) =>
       prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv))
     );
-    // Also update selected invoice to reflect changes in drawer if it's still open
     if (selectedInvoice && selectedInvoice.id === updatedInvoice.id) {
       setSelectedInvoice(updatedInvoice);
     }
@@ -113,15 +164,13 @@ export default function InvoiceGrid() {
   };
 
   const handleDeleteClick = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Avoid opening drawer on delete action
+    e.stopPropagation();
     if (!confirm('האם אתה בטוח שברצונך למחוק חשבונית זו? הקובץ המקושר ב-Google Drive יימחק גם הוא.')) {
       return;
     }
 
     try {
-      const res = await fetch(`/api/invoices?id=${id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(`/api/invoices?id=${id}`, { method: 'DELETE' });
 
       if (!res.ok) {
         throw new Error('שגיאה במחיקת החשבונית.');
@@ -134,6 +183,7 @@ export default function InvoiceGrid() {
         if (selectedInvoice?.id === id) {
           setSelectedInvoice(null);
         }
+        fetchTabCounts();
       }
     } catch (err) {
       console.error('Delete invoice error:', err);
@@ -145,10 +195,8 @@ export default function InvoiceGrid() {
     e.stopPropagation();
     const newCategoryId = e.target.value;
     
-    // Find the category object to optimistically update UI
     const selectedCat = categories.find(c => c.id === newCategoryId) || null;
     
-    // Optimistic UI update
     setInvoices(prev => prev.map(inv => {
       if (inv.id === invoiceId) {
         return {
@@ -160,7 +208,6 @@ export default function InvoiceGrid() {
       return inv;
     }));
 
-    // If it's also selected in drawer, update there too
     if (selectedInvoice && selectedInvoice.id === invoiceId) {
       setSelectedInvoice(prev => prev ? ({
         ...prev,
@@ -188,7 +235,7 @@ export default function InvoiceGrid() {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(column);
-      setSortOrder('desc'); // Default to desc when clicking a new column
+      setSortOrder('desc');
     }
   };
 
@@ -197,13 +244,71 @@ export default function InvoiceGrid() {
     return sortOrder === 'asc' ? ' ↑' : ' ↓';
   };
 
+  const handleTabChange = (tab: StatusTab) => {
+    setActiveTab(tab);
+    setPage(1);
+  };
+
+  const getTabStyle = (tab: StatusTab): React.CSSProperties => {
+    const isActive = activeTab === tab;
+    const baseStyle: React.CSSProperties = {
+      padding: '8px 20px',
+      fontSize: 'var(--font-size-sm)',
+      fontWeight: 600,
+      cursor: 'pointer',
+      border: 'none',
+      borderBottom: isActive ? '3px solid' : '3px solid transparent',
+      background: 'transparent',
+      transition: 'all var(--transition-fast)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+    };
+
+    if (!isActive) {
+      return { ...baseStyle, color: 'var(--color-text-secondary)', opacity: 0.7 };
+    }
+    
+    switch (tab) {
+      case 'pending': return { ...baseStyle, color: '#f59e0b', borderBottomColor: '#f59e0b' };
+      case 'matched': return { ...baseStyle, color: '#10b981', borderBottomColor: '#10b981' };
+      case 'error': return { ...baseStyle, color: '#ef4444', borderBottomColor: '#ef4444' };
+      case 'all': return { ...baseStyle, color: 'var(--color-accent)', borderBottomColor: 'var(--color-accent)' };
+    }
+  };
+
   return (
     <div>
+      {/* Status Tabs */}
+      <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--color-glass-border)', marginBottom: 'var(--space-4)' }}>
+        {(['pending', 'matched', 'error', 'all'] as StatusTab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => handleTabChange(tab)}
+            style={getTabStyle(tab)}
+          >
+            <span>{STATUS_TAB_ICONS[tab]}</span>
+            <span>{STATUS_TAB_LABELS[tab]}</span>
+            <span style={{
+              background: activeTab === tab ? 'currentColor' : 'var(--color-bg-tertiary)',
+              color: activeTab === tab ? '#fff' : 'var(--color-text-secondary)',
+              padding: '1px 8px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '11px',
+              fontWeight: 700,
+              minWidth: '24px',
+              textAlign: 'center',
+            }}>
+              {tabCounts[tab]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Search & Filters */}
       <div className="card animate-in" style={{ marginBottom: 'var(--space-6)' }}>
         <div className="card-body" style={{ padding: 'var(--space-4)' }}>
           <div className="filter-bar">
-            {/* Search Input */}
             <input
               type="text"
               placeholder="חיפוש לפי שם ספק, ח.פ..."
@@ -215,23 +320,6 @@ export default function InvoiceGrid() {
               }}
               style={{ flex: 2 }}
             />
-
-            {/* Status Select */}
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">כל הסטטוסים</option>
-              <option value="new">חדש</option>
-              <option value="partially_matched">התאמה חלקית</option>
-              <option value="fully_matched">הותאם במלואו</option>
-              <option value="approved_no_expense">אושר ללא הוצאה</option>
-              <option value="processing">בעיבוד</option>
-              <option value="error">שגיאה</option>
-            </select>
 
             {/* Date From */}
             <input
@@ -296,12 +384,11 @@ export default function InvoiceGrid() {
             </select>
 
             {/* Reset Button */}
-            {(search || status || dateFrom || dateTo || minAmount || maxAmount || categoryId) && (
+            {(search || dateFrom || dateTo || minAmount || maxAmount || categoryId) && (
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
                   setSearch('');
-                  setStatus('');
                   setDateFrom('');
                   setDateTo('');
                   setMinAmount('');
@@ -473,6 +560,7 @@ export default function InvoiceGrid() {
           setInvoices((prev) => prev.filter((inv) => inv.id !== id));
           setTotalCount((prev) => prev - 1);
           setSelectedInvoice(null);
+          fetchTabCounts();
         }}
       />
     </div>

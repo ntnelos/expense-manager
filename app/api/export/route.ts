@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from('expense_lines')
-      .select('*, matches(*, invoices(*))')
+      .select('*, matches(*, invoice:invoices(*))')
       .in('status', statuses)
       .order('transaction_date', { ascending: false });
 
@@ -49,7 +49,8 @@ export async function GET(req: Request) {
     const excelRows: any[] = [];
 
     for (const line of data || []) {
-      const matches = line.matches || [];
+      const rawMatches = line.matches;
+      const matches = Array.isArray(rawMatches) ? rawMatches : rawMatches ? [rawMatches] : [];
       
       // If no matches, or just one match, or approved without invoice
       if (matches.length === 0) {
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
       } else {
         // Iterate through all matches for this expense line
         matches.forEach((match: any, index: number) => {
-          const invoice = match.invoices;
+          const invoice = match.invoice;
           const isDuplicate = index > 0;
           
           excelRows.push({

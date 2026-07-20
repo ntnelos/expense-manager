@@ -18,6 +18,25 @@ function formatCurrency(amount: number | null, currency: string = 'ILS'): string
   }).format(amount);
 }
 
+function getSourceLabel(source: string | null) {
+  switch (source) {
+    case 'email': return '📧 אימייל';
+    case 'telegram': return '📱 טלגרם';
+    case 'manual_upload': return '📤 העלאה ידנית';
+    default: return source || '—';
+  }
+}
+
+function getDocTypeLabel(docType: string | null) {
+  switch (docType) {
+    case 'tax_invoice': return 'חשבונית מס';
+    case 'receipt': return 'קבלה';
+    case 'tax_invoice_receipt': return 'חשבונית מס / קבלה';
+    case 'other': return 'אחר';
+    default: return '—';
+  }
+}
+
 export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: InvoiceDetailPanelProps) {
   const isOpen = !!invoice;
   const [isEditing, setIsEditing] = useState(false);
@@ -76,6 +95,26 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
     }
   };
 
+  const detailItemStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '4px 0',
+    borderBottom: '1px solid var(--color-glass-border)',
+    fontSize: 'var(--font-size-xs)',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    color: 'var(--color-text-muted)',
+    fontWeight: 500,
+    flexShrink: 0,
+  };
+
+  const valueStyle: React.CSSProperties = {
+    fontWeight: 600,
+    textAlign: 'left',
+  };
+
   return (
     <>
       <div 
@@ -102,90 +141,122 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
 
         {invoice && (
           <div className="slide-panel-content">
-            <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-              
-              <div className="detail-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-                  <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700 }}>מידע כללי</h3>
-                  {!isEditing ? (
-                    <button type="button" onClick={() => setIsEditing(true)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>✏️ ערוך</button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button type="button" onClick={() => setIsEditing(false)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>ביטול</button>
-                      <button type="submit" form="invoice-edit-form" disabled={isSaving} className="btn btn-primary btn-sm" style={{ padding: '2px 8px' }}>{isSaving ? 'שומר...' : '💾 שמור'}</button>
-                    </div>
-                  )}
+            {/* Document Preview — TOP */}
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              {invoice.drive_file_url ? (
+                <div style={{ height: '400px', width: '100%', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--color-glass-border)' }}>
+                  <iframe 
+                    src={invoice.drive_file_url.replace('/view', '/preview')} 
+                    width="100%" 
+                    height="100%" 
+                    allow="autoplay"
+                    style={{ border: 'none' }}
+                  />
                 </div>
+              ) : (
+                <div className="empty-state" style={{ padding: 'var(--space-4)' }}>
+                  לא נמצא קישור למסמך המקורי ב-Drive
+                </div>
+              )}
+            </div>
 
-                <form id="invoice-edit-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="detail-grid">
-                  <div className="detail-item">
-                    <span className="detail-label">ספק</span>
-                    {isEditing ? (
-                      <input type="text" className="input" value={formData.supplier_name} onChange={e => setFormData({...formData, supplier_name: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '200px' }} />
-                    ) : (
-                      <span className="detail-value">{invoice.supplier_name || '—'}</span>
-                    )}
-                  </div>
-                  
-                  <div className="detail-item">
-                    <span className="detail-label">מספר חשבונית</span>
-                    {isEditing ? (
-                      <input type="text" className="input" value={formData.invoice_number} onChange={e => setFormData({...formData, invoice_number: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '150px' }} />
-                    ) : (
-                      <span className="detail-value">{invoice.invoice_number || '—'}</span>
-                    )}
-                  </div>
-                  
-                  <div className="detail-item">
-                    <span className="detail-label">תאריך הוצאה</span>
-                    {isEditing ? (
-                      <input type="date" className="input" value={formData.invoice_date} onChange={e => setFormData({...formData, invoice_date: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '150px' }} />
-                    ) : (
-                      <span className="detail-value">{formatToIsraeliDate(invoice.invoice_date)}</span>
-                    )}
-                  </div>
-
-                  <div className="detail-item">
-                    <span className="detail-label">סכום לתשלום</span>
-                    {isEditing ? (
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <input type="number" step="0.01" className="input" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '100px' }} />
-                        <select className="input" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} style={{ padding: '4px' }}>
-                          <option value="ILS">₪ ILS</option>
-                          <option value="USD">$ USD</option>
-                          <option value="EUR">€ EUR</option>
-                        </select>
-                      </div>
-                    ) : (
-                      <span className="detail-value" style={{ color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--font-size-lg)' }}>
-                        {formatCurrency(invoice.total_amount, invoice.currency || 'ILS')}
-                      </span>
-                    )}
-                  </div>
-                </form>
-              </div>
-
-              <div className="detail-card">
-                <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700, marginBottom: 'var(--space-3)' }}>
-                  המסמך המקורי
-                </h3>
-                {invoice.drive_file_url ? (
-                  <div style={{ height: '600px', width: '100%', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--color-glass-border)' }}>
-                    <iframe 
-                      src={invoice.drive_file_url.replace('/view', '/preview')} 
-                      width="100%" 
-                      height="100%" 
-                      allow="autoplay"
-                      style={{ border: 'none' }}
-                    />
-                  </div>
+            {/* Details Card — BELOW */}
+            <div className="detail-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+                <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700 }}>מידע כללי</h3>
+                {!isEditing ? (
+                  <button type="button" onClick={() => setIsEditing(true)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>✏️ ערוך</button>
                 ) : (
-                  <div className="empty-state">
-                    לא נמצא קישור למסמך המקורי ב-Drive
+                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <button type="button" onClick={() => setIsEditing(false)} className="btn btn-secondary btn-sm" style={{ padding: '2px 8px' }}>ביטול</button>
+                    <button type="submit" form="invoice-edit-form" disabled={isSaving} className="btn btn-primary btn-sm" style={{ padding: '2px 8px' }}>{isSaving ? 'שומר...' : '💾 שמור'}</button>
                   </div>
                 )}
               </div>
 
+              <form id="invoice-edit-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+                {/* Editable Fields */}
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>ספק</span>
+                  {isEditing ? (
+                    <input type="text" className="input" value={formData.supplier_name} onChange={e => setFormData({...formData, supplier_name: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '200px' }} />
+                  ) : (
+                    <span style={valueStyle}>{invoice.supplier_name || '—'}</span>
+                  )}
+                </div>
+                
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>מספר חשבונית</span>
+                  {isEditing ? (
+                    <input type="text" className="input" value={formData.invoice_number} onChange={e => setFormData({...formData, invoice_number: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '150px' }} />
+                  ) : (
+                    <span style={valueStyle}>{invoice.invoice_number || '—'}</span>
+                  )}
+                </div>
+                
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>תאריך חשבונית</span>
+                  {isEditing ? (
+                    <input type="date" className="input" value={formData.invoice_date} onChange={e => setFormData({...formData, invoice_date: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '150px' }} />
+                  ) : (
+                    <span style={valueStyle}>{formatToIsraeliDate(invoice.invoice_date)}</span>
+                  )}
+                </div>
+
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>סכום כולל</span>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <input type="number" step="0.01" className="input" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '100px' }} />
+                      <select className="input" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} style={{ padding: '4px' }}>
+                        <option value="ILS">₪ ILS</option>
+                        <option value="USD">$ USD</option>
+                        <option value="EUR">€ EUR</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <span style={{ ...valueStyle, color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--font-size-md)' }}>
+                      {formatCurrency(invoice.total_amount, invoice.currency || 'ILS')}
+                    </span>
+                  )}
+                </div>
+              </form>
+
+              {/* Read-only fields */}
+              <div style={{ ...detailItemStyle, marginTop: 'var(--space-2)' }}>
+                <span style={labelStyle}>ח.פ / ע.מ</span>
+                <span style={valueStyle}>{invoice.supplier_tax_id || '—'}</span>
+              </div>
+              <div style={detailItemStyle}>
+                <span style={labelStyle}>סוג מסמך</span>
+                <span style={valueStyle}>{getDocTypeLabel(invoice.document_type)}</span>
+              </div>
+              <div style={detailItemStyle}>
+                <span style={labelStyle}>מקור</span>
+                <span style={valueStyle}>{getSourceLabel(invoice.source)}</span>
+              </div>
+              <div style={detailItemStyle}>
+                <span style={labelStyle}>מע״מ</span>
+                <span style={valueStyle}>{formatCurrency(invoice.vat_amount, 'ILS')}</span>
+              </div>
+              {invoice.original_amount && invoice.currency && invoice.currency !== 'ILS' && (
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>סכום מקורי</span>
+                  <span style={valueStyle}>{formatCurrency(invoice.original_amount, invoice.currency)} ({invoice.currency})</span>
+                </div>
+              )}
+              <div style={detailItemStyle}>
+                <span style={labelStyle}>סכום שהותאם</span>
+                <span style={{ ...valueStyle, color: 'var(--color-success)' }}>{formatCurrency(invoice.matched_amount, 'ILS')}</span>
+              </div>
+              <div style={detailItemStyle}>
+                <span style={labelStyle}>תאריך העלאה</span>
+                <span style={valueStyle}>{formatToIsraeliDate(invoice.created_at)}</span>
+              </div>
+              <div style={{ ...detailItemStyle, borderBottom: 'none' }}>
+                <span style={labelStyle}>קובץ מקורי</span>
+                <span style={{ ...valueStyle, fontSize: '11px' }}>{invoice.original_filename || '—'}</span>
+              </div>
             </div>
           </div>
         )}
