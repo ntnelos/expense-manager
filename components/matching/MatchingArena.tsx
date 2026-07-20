@@ -287,6 +287,37 @@ export default function MatchingArena() {
     setNoteLine(null);
   };
 
+  const handleUnmatch = async (line: ExpenseLine) => {
+    if (!window.confirm('האם אתה בטוח שברצונך לבטל את ההתאמה?')) return;
+    try {
+      if (line.status === 'approved_no_invoice') {
+        const res = await fetch(`/api/expense-lines`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: line.id,
+            status: 'unapproved',
+            approval_note: null
+          })
+        });
+        if (!res.ok) throw new Error('Failed to unmatch');
+      } else {
+        const matches = Array.isArray((line as any).matches) ? (line as any).matches : ((line as any).matches ? [(line as any).matches] : []);
+        if (matches.length > 0) {
+          for (const m of matches) {
+            if (!m?.id) continue;
+            const res = await fetch(`/api/matches?id=${m.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed to delete match');
+          }
+        }
+      }
+      fetchUnmatchedData(true);
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בביטול התאמה');
+    }
+  };
+
   // Generate Auto-Match Proposals (Score >= 70)
   const autoMatchProposals = useMemo(() => {
     const proposals: any[] = [];
@@ -492,6 +523,13 @@ export default function MatchingArena() {
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 2px', opacity: line.approval_note ? 1 : 0.5 }}
                   >
                     📝
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleUnmatch(line); }}
+                    title="בטל התאמה"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 2px' }}
+                  >
+                    ❌
                   </button>
                 </div>
                 {line.status === 'approved_no_invoice' && line.approval_note && (

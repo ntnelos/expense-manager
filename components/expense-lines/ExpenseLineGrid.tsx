@@ -167,6 +167,37 @@ export default function ExpenseLineGrid() {
     }
   };
 
+  const handleUnmatch = async (line: ExpenseLine) => {
+    if (!window.confirm('האם אתה בטוח שברצונך לבטל את ההתאמה?')) return;
+    try {
+      if (line.status === 'approved_no_invoice') {
+        const res = await fetch(`/api/expense-lines`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: line.id,
+            status: 'unapproved',
+            approval_note: null
+          })
+        });
+        if (!res.ok) throw new Error('Failed to unmatch');
+      } else {
+        const matches = Array.isArray((line as any).matches) ? (line as any).matches : ((line as any).matches ? [(line as any).matches] : []);
+        if (matches.length > 0) {
+          for (const m of matches) {
+            if (!m?.id) continue;
+            const res = await fetch(`/api/matches?id=${m.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed to delete match');
+          }
+        }
+      }
+      fetchLines();
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בביטול התאמה');
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
@@ -396,6 +427,15 @@ export default function ExpenseLineGrid() {
                             🗑️
                           </button>
                         </>
+                      )}
+                      {(line.status === 'approved' || line.status === 'approved_no_invoice') && (
+                        <button 
+                          className="btn btn-ghost btn-icon" 
+                          onClick={() => handleUnmatch(line)}
+                          title="בטל התאמה"
+                        >
+                          ❌
+                        </button>
                       )}
                     </div>
                   </td>

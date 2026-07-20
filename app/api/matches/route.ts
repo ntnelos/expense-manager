@@ -95,15 +95,15 @@ export async function DELETE(req: Request) {
 
     if (error) throw error;
 
-    // Move file in Google Drive back to "not_matched" folder
+    // Move file in Google Drive back to "not_matched" folder ONLY if the invoice has no other matches
     if (match?.invoice_id) {
       const { data: invoice } = await supabase
         .from('invoices')
-        .select('drive_file_id, invoice_date')
+        .select('drive_file_id, invoice_date, status')
         .eq('id', match.invoice_id)
         .single();
         
-      if (invoice?.drive_file_id) {
+      if (invoice?.drive_file_id && invoice.status === 'new') {
         const dateToUse = invoice.invoice_date ? new Date(invoice.invoice_date) : new Date();
         moveInvoiceDriveStatus(invoice.drive_file_id, dateToUse, 'not_matched').catch(console.error);
       }
