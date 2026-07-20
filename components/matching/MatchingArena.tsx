@@ -507,15 +507,20 @@ export default function MatchingArena() {
                     {line.status === 'approved_no_invoice' ? '✔️ אושר ללא חשבונית' : '✅ הותאם'}
                   </span>
                   {(() => {
-                    const matchObj = Array.isArray((line as any).matches) ? (line as any).matches[0] : (line as any).matches;
-                    return matchObj && matchObj.invoice ? (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
-                      >
-                        📄 צפה
-                      </button>
-                    ) : null;
+                    const matchesArray = Array.isArray((line as any).matches) ? (line as any).matches : ((line as any).matches ? [(line as any).matches] : []);
+                    return matchesArray.map((matchObj: any, index: number) => {
+                      if (!matchObj || !matchObj.invoice) return null;
+                      return (
+                        <button
+                          key={matchObj.id || index}
+                          className="btn btn-secondary btn-sm"
+                          onClick={(e) => { e.stopPropagation(); setViewingInvoice(matchObj.invoice); }}
+                          title={matchObj.invoice.original_filename || 'חשבונית'}
+                        >
+                          📄 {matchesArray.length > 1 ? `צפה (${index + 1})` : 'צפה'}
+                        </button>
+                      );
+                    });
                   })()}
                   <button
                     onClick={(e) => { e.stopPropagation(); setNoteLine(line); }}
