@@ -355,7 +355,14 @@ export default function MatchingArena() {
 
   const candidateLines = selectedInvoices.length > 0
     ? expenseLines
-      .filter(line => line.status !== 'approved' && line.status !== 'approved_no_invoice')
+      .filter(line => {
+        if (line.status === 'approved' || line.status === 'approved_no_invoice') return false;
+        if (lineSearch) {
+          const q = lineSearch.toLowerCase();
+          return (line.description || '').toLowerCase().includes(q);
+        }
+        return true;
+      })
       .map(line => ({ line, score: getMatchScore(selectedInvoices, line) }))
       .sort((a, b) => b.score - a.score)
     : [];
@@ -595,18 +602,31 @@ export default function MatchingArena() {
             </div>
 
             {/* Quick Search */}
-            <div style={{ marginTop: 'var(--space-2)' }}>
+            <div style={{ marginTop: 'var(--space-2)', position: 'relative' }}>
               <input
                 type="text"
                 placeholder="🔍 חיפוש מהיר לפי שם..."
                 value={lineSearch}
                 onChange={(e) => setLineSearch(e.target.value)}
                 style={{
-                  width: '100%', padding: '6px 12px', fontSize: 'var(--font-size-xs)',
+                  width: '100%', padding: '6px 12px', paddingLeft: '30px', fontSize: 'var(--font-size-xs)',
                   border: '1px solid var(--color-glass-border)', borderRadius: 'var(--radius-md)',
                   background: 'var(--color-bg-primary)', color: 'inherit',
                 }}
               />
+              {lineSearch && (
+                <button
+                  onClick={() => setLineSearch('')}
+                  style={{
+                    position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: '14px', padding: '2px'
+                  }}
+                  title="נקה חיפוש"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* Sort Controls */}
@@ -657,18 +677,31 @@ export default function MatchingArena() {
             </div>
 
             {/* Quick Search */}
-            <div style={{ marginTop: 'var(--space-2)' }}>
+            <div style={{ marginTop: 'var(--space-2)', position: 'relative' }}>
               <input
                 type="text"
                 placeholder="🔍 חיפוש מהיר לפי שם ספק..."
                 value={invSearch}
                 onChange={(e) => setInvSearch(e.target.value)}
                 style={{
-                  width: '100%', padding: '6px 12px', fontSize: 'var(--font-size-xs)',
+                  width: '100%', padding: '6px 12px', paddingLeft: '30px', fontSize: 'var(--font-size-xs)',
                   border: '1px solid var(--color-glass-border)', borderRadius: 'var(--radius-md)',
                   background: 'var(--color-bg-primary)', color: 'inherit',
                 }}
               />
+              {invSearch && (
+                <button
+                  onClick={() => setInvSearch('')}
+                  style={{
+                    position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: '14px', padding: '2px'
+                  }}
+                  title="נקה חיפוש"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 'var(--space-4)', marginTop: 'var(--space-2)' }}>
