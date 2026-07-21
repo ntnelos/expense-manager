@@ -21,12 +21,13 @@ function formatCurrency(amount: number | null): string {
   }).format(amount);
 }
 
-type StatusTab = 'pending' | 'matched' | 'error' | 'all';
+type StatusTab = 'pending' | 'matched' | 'error' | 'sent' | 'all';
 
 const STATUS_TAB_MAP: Record<StatusTab, string> = {
   pending: 'new,partially_matched',
   matched: 'fully_matched,approved_no_expense',
   error: 'error',
+  sent: 'sent_to_accountant',
   all: '',
 };
 
@@ -34,6 +35,7 @@ const STATUS_TAB_LABELS: Record<StatusTab, string> = {
   pending: 'ממתין',
   matched: 'הותאם',
   error: 'שגיאה',
+  sent: 'נשלח לרו״ח',
   all: 'הכל',
 };
 
@@ -41,6 +43,7 @@ const STATUS_TAB_ICONS: Record<StatusTab, string> = {
   pending: '⏳',
   matched: '✅',
   error: '⚠️',
+  sent: '📨',
   all: '📋',
 };
 
@@ -69,7 +72,7 @@ export default function InvoiceGrid() {
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Tab counts
-  const [tabCounts, setTabCounts] = useState<Record<StatusTab, number>>({ pending: 0, matched: 0, error: 0, all: 0 });
+  const [tabCounts, setTabCounts] = useState<Record<StatusTab, number>>({ pending: 0, matched: 0, error: 0, sent: 0, all: 0 });
 
   // Selected Invoice for Drawer
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -85,8 +88,8 @@ export default function InvoiceGrid() {
   // Fetch tab counts
   const fetchTabCounts = useCallback(async () => {
     try {
-      const tabs: StatusTab[] = ['pending', 'matched', 'error', 'all'];
-      const counts: Record<StatusTab, number> = { pending: 0, matched: 0, error: 0, all: 0 };
+      const tabs: StatusTab[] = ['pending', 'matched', 'error', 'sent', 'all'];
+      const counts: Record<StatusTab, number> = { pending: 0, matched: 0, error: 0, sent: 0, all: 0 };
       
       await Promise.all(tabs.map(async (tab) => {
         const statusParam = STATUS_TAB_MAP[tab];
@@ -273,6 +276,7 @@ export default function InvoiceGrid() {
       case 'pending': return { ...baseStyle, color: '#f59e0b', borderBottomColor: '#f59e0b' };
       case 'matched': return { ...baseStyle, color: '#10b981', borderBottomColor: '#10b981' };
       case 'error': return { ...baseStyle, color: '#ef4444', borderBottomColor: '#ef4444' };
+      case 'sent': return { ...baseStyle, color: '#8b5cf6', borderBottomColor: '#8b5cf6' };
       case 'all': return { ...baseStyle, color: 'var(--color-accent)', borderBottomColor: 'var(--color-accent)' };
     }
   };

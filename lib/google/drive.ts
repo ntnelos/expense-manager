@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 
 // Initialize the Google Drive Client using a Service Account
-function getDriveClient() {
+export function getDriveClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY;
 

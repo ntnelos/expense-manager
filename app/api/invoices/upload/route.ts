@@ -116,16 +116,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Handle credit notes (ignore completely if AI detected it, and no error occurred)
+    // 4. Handle credit notes (make amounts negative)
     if (!hasOcrError && ocrResult.is_credit_note) {
-      return NextResponse.json(
-        {
-          message: 'Credit note/refund document detected and skipped.',
-          code: 'CREDIT_NOTE_IGNORED',
-          ocr: ocrResult,
-        },
-        { status: 200 }
-      );
+      if (finalTotalAmount !== null) finalTotalAmount = -Math.abs(finalTotalAmount);
+      if (originalAmount !== null) originalAmount = -Math.abs(originalAmount);
     }
     // 5. Upload file to Google Drive with smart renaming
     const extension = file.name.split('.').pop() || 'pdf';
@@ -175,23 +169,30 @@ export async function POST(request: Request) {
 
     // 5.8 Semantic Duplicate Check (By Supplier + Invoice Number)
     if (!hasOcrError && ocrResult.supplier_name && ocrResult.invoice_number) {
-      const { data: semanticDuplicate } = await supabase
+      const { data: semanticDuplicates } = await supabase
         .from('invoices')
         .select('id, supplier_name, invoice_number, invoice_date, total_amount')
         .eq('supplier_name', ocrResult.supplier_name)
-        .eq('invoice_number', ocrResult.invoice_number)
-        .maybeSingle();
+        .eq('invoice_number', ocrResult.invoice_number);
 
-      if (semanticDuplicate) {
-        if (uploadedFileId) await deleteFromGoogleDrive(uploadedFileId);
-        return NextResponse.json(
-          {
-            error: 'Duplicate invoice detected (same supplier and invoice number).',
-            code: 'DUPLICATE_INVOICE',
-            invoice: semanticDuplicate,
-          },
-          { status: 409 }
-        );
+      if (semanticDuplicates && semanticDuplicates.length > 0) {
+        const newSign = (finalTotalAmount || 0) < 0 ? -1 : 1;
+        const isDuplicate = semanticDuplicates.some(dup => {
+          const dupSign = (dup.total_amount || 0) < 0 ? -1 : 1;
+          return newSign === dupSign;
+        });
+
+        if (isDuplicate) {
+          if (uploadedFileId) await deleteFromGoogleDrive(uploadedFileId);
+          return NextResponse.json(
+            {
+              error: 'Duplicate invoice detected (same supplier and invoice number).',
+              code: 'DUPLICATE_INVOICE',
+              invoice: semanticDuplicates[0],
+            },
+            { status: 409 }
+          );
+        }
       }
     }
 

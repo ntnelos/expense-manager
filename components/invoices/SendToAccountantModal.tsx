@@ -1,0 +1,201 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function SendToAccountantModal() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preparedData, setPreparedData] = useState<any>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const router = useRouter();
+
+  const handlePrepare = async () => {
+    setIsPreparing(true);
+    setError(null);
+    setPreparedData(null);
+    setIsSuccess(false);
+
+    try {
+      const url = `/api/export/accountant/prepare?month=${month}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to prepare files');
+      }
+
+      setPreparedData(data);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!preparedData) return;
+    setIsSending(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/export/accountant/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month,
+          invoiceIds: preparedData.invoiceIds,
+          pdfFileId: preparedData.pdf.id,
+          excelFileId: preparedData.excel.id
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        if (data.tooLarge) {
+          // Manually update status without sending email
+          const updateRes = await fetch('/api/invoices', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids: preparedData.invoiceIds,
+              updates: { status: 'sent_to_accountant' }
+            })
+          });
+          if (!updateRes.ok) throw new Error('Failed to update status manually');
+          setError(data.error); // Show the too large error as a warning/info
+        } else {
+          throw new Error(data.error || 'Failed to send email');
+        }
+      }
+      
+      setIsSuccess(true);
+      router.refresh();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const reset = () => {
+    setIsOpen(false);
+    setPreparedData(null);
+    setIsSuccess(false);
+    setError(null);
+  };
+
+  return (
+    <>
+      <button className="btn btn-primary" onClick={() => setIsOpen(true)}>
+        📨 שלח לרו״ח
+      </button>
+
+      {isOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="modal-content animate-in" style={{ maxWidth: '500px', width: '90%' }}>
+            <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 'var(--space-4)' }}>
+              שליחת חשבוניות לרואה חשבון
+            </h2>
+            
+            {error && !isSuccess && (
+              <div style={{ color: 'var(--color-error)', backgroundColor: 'var(--color-surface-hover)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)' }}>
+                {error}
+              </div>
+            )}
+
+            {!preparedData && !isSuccess && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+                <p style={{ color: 'var(--color-text-secondary)' }}>
+                  פעולה זו תיקח את כל החשבוניות המותאמות בחודש הנבחר, תשרשר אותן לקובץ PDF אחד, ותשלח אותן יחד עם אקסל פירוט התאמות לרואה החשבון.
+                </p>
+                <div>
+                  <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
+                    חודש (תאריך חשבונית)
+                  </label>
+                  <input 
+                    type="month" 
+                    className="input" 
+                    value={month} 
+                    onChange={e => setMonth(e.target.value)} 
+                    style={{ width: '100%', fontSize: 'var(--font-size-md)' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {preparedData && !isSuccess && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+                <div style={{ backgroundColor: 'var(--color-success)', color: 'white', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
+                  הקבצים מוכנים! נמצאו {preparedData.count} חשבוניות.
+                </div>
+                
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', textAlign: 'center' }}>
+                  לפני השליחה, מומלץ להוריד ולבדוק את הקבצים שיועברו:
+                </p>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+                  <a href={preparedData.excel.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
+                    <span style={{ fontSize: '24px' }}>📊</span>
+                    <span>אקסל התאמות</span>
+                  </a>
+                  <a href={preparedData.pdf.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
+                    <span style={{ fontSize: '24px' }}>📄</span>
+                    <span>PDF מאוחד</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {isSuccess && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', alignItems: 'center' }}>
+                <div style={{ fontSize: '48px' }}>✅</div>
+                <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>הקבצים נשלחו לרואה החשבון בהצלחה!</h3>
+                <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+                  הסטטוס של כל החשבוניות עודכן ל"נשלח לרו״ח".
+                  המייל המקורי הועבר ונמצא כעת בתיקיית דואר יוצא במייל שלך.
+                </p>
+                
+                {error && (
+                  <div style={{ color: 'var(--color-warning)', backgroundColor: 'var(--color-surface-hover)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginTop: 'var(--space-2)' }}>
+                    <strong>שים לב:</strong> {error}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-4)' }}>
+              {isSuccess ? (
+                <button className="btn btn-primary" onClick={reset}>
+                  סיום
+                </button>
+              ) : (
+                <>
+                  <button className="btn btn-secondary" onClick={reset} disabled={isPreparing || isSending}>
+                    ביטול
+                  </button>
+                  
+                  {!preparedData ? (
+                    <button className="btn btn-primary" onClick={handlePrepare} disabled={isPreparing || !month}>
+                      {isPreparing ? 'מכין קבצים...' : 'המשך'}
+                    </button>
+                  ) : (
+                    <button className="btn btn-primary" onClick={handleSend} disabled={isSending}>
+                      {isSending ? 'שולח...' : 'אישור שליחה למייל'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

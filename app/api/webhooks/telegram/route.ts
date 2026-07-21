@@ -130,23 +130,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
+    // Handle credit notes (make amounts negative)
     if (ocrResult.is_credit_note) {
-      await sendMessage(chatId, `⚠️ הקובץ זוהה כחשבונית זיכוי/קבלה ולכן לא נשמר במערכת (המערכת כרגע לא תומכת בזיכויים).`);
-      return NextResponse.json({ success: true });
+      if (ocrResult.total_amount !== null) ocrResult.total_amount = -Math.abs(ocrResult.total_amount);
+      if (ocrResult.vat_amount !== null) ocrResult.vat_amount = -Math.abs(ocrResult.vat_amount);
     }
 
     // 6.5 Semantic Duplicate Check
     if (ocrResult.supplier_name && ocrResult.invoice_number) {
-      const { data: semanticDuplicate } = await supabase
+      const { data: semanticDuplicates } = await supabase
         .from('invoices')
         .select('id, supplier_name, invoice_number, total_amount')
         .eq('supplier_name', ocrResult.supplier_name)
-        .eq('invoice_number', ocrResult.invoice_number)
-        .maybeSingle();
+        .eq('invoice_number', ocrResult.invoice_number);
 
-      if (semanticDuplicate) {
-        await sendMessage(chatId, `⚠️ חשבונית זו כבר קיימת במערכת!\n(ספק: ${semanticDuplicate.supplier_name}, מספר חשבונית: ${semanticDuplicate.invoice_number}, סכום: ₪${semanticDuplicate.total_amount}).`);
-        return NextResponse.json({ success: true });
+      if (semanticDuplicates && semanticDuplicates.length > 0) {
+        const newSign = (ocrResult.total_amount || 0) < 0 ? -1 : 1;
+        const isDuplicate = semanticDuplicates.some(dup => {
+          const dupSign = (dup.total_amount || 0) < 0 ? -1 : 1;
+          return newSign === dupSign;
+        });
+
+        if (isDuplicate) {
+          await sendMessage(chatId, `⚠️ חשבונית זו כבר קיימת במערכת!\n(ספק: ${semanticDuplicates[0].supplier_name}, מספר חשבונית: ${semanticDuplicates[0].invoice_number}, סכום: ₪${semanticDuplicates[0].total_amount}).`);
+          return NextResponse.json({ success: true });
+        }
       }
     }
 
