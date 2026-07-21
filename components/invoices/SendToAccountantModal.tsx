@@ -145,11 +145,19 @@ export default function SendToAccountantModal() {
                 
                   <button 
                     onClick={() => {
-                      window.open(preparedData.excel.url, '_blank');
-                      preparedData.pdfFiles?.forEach((pdf: any, idx: number) => {
+                      const urls = [preparedData.excel.url, ...(preparedData.pdfFiles?.map((p: any) => p.url) || [])];
+                      urls.forEach((url, idx) => {
                         setTimeout(() => {
-                          window.open(pdf.url, '_blank');
-                        }, (idx + 1) * 500);
+                          const iframe = document.createElement('iframe');
+                          iframe.style.display = 'none';
+                          iframe.src = url;
+                          document.body.appendChild(iframe);
+                          setTimeout(() => {
+                            if (document.body.contains(iframe)) {
+                              document.body.removeChild(iframe);
+                            }
+                          }, 5000);
+                        }, idx * 600);
                       });
                     }}
                     className="btn btn-secondary" 
@@ -157,7 +165,6 @@ export default function SendToAccountantModal() {
                   >
                     <span style={{ fontSize: '24px' }}>📥</span>
                     <span style={{ fontWeight: 'bold' }}>הורדת כל קבצי הייצוא (אקסל + תמונות מרוכזות)</span>
-                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>הדפדפן עשוי לבקש אישור לפתיחת מספר כרטיסיות חדשות (Pop-ups)</span>
                   </button>
               </div>
             )}
