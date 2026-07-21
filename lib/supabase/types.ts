@@ -18,6 +18,7 @@ export interface Invoice {
   total_amount: number | null;
   vat_amount: number | null;
   matched_amount: number;
+  sent_to_accountant: boolean | null;
   document_type: 'tax_invoice' | 'receipt' | 'tax_invoice_receipt' | 'other' | null;
   status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error' | 'approved_no_expense';
   approval_note?: string;

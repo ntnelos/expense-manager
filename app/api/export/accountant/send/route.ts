@@ -111,10 +111,10 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    // 6. Update Status
+    // 6. Update sent_to_accountant flag
     const { error: updateError } = await supabase
       .from('invoices')
-      .update({ status: 'sent_to_accountant' })
+      .update({ sent_to_accountant: true })
       .in('id', invoiceIds);
 
     if (updateError) throw updateError;

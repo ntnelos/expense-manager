@@ -107,7 +107,7 @@ export async function GET(req: Request) {
             'מע״מ (חשבונית)': invoice?.vat_amount || '',
             'קטגוריה': invoice?.categories?.name || '',
             'סטטוס התאמה': translateStatus(line.status),
-            'קישור לחשבונית': invoice?.drive_file_url || '',
+            'קישור לחשבונית': invoice?.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: invoice.drive_file_url } : '',
           });
         });
       }

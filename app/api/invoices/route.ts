@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     const minAmount = searchParams.get('minAmount') || '';
     const maxAmount = searchParams.get('maxAmount') || '';
     const categoryId = searchParams.get('categoryId') || '';
+    const sentToAccountant = searchParams.get('sentToAccountant'); // 'true' | 'false' | null
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
 
@@ -56,6 +57,13 @@ export async function GET(request: Request) {
 
     if (categoryId) {
       query = query.eq('category_id', categoryId);
+    }
+
+    if (sentToAccountant === 'true') {
+      query = query.eq('sent_to_accountant', true);
+    } else if (sentToAccountant === 'false') {
+      // Because old rows might have null instead of false, we check for not true
+      query = query.not('sent_to_accountant', 'eq', true);
     }
 
     // Sort

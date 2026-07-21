@@ -73,6 +73,18 @@ export async function generateStyledExcel(headers: string[], rows: any[], sheetN
     });
   }
 
+  // Format hyperlinks
+  const linkColIndex = headers.indexOf('קישור לחשבונית') + 1;
+  if (linkColIndex > 0) {
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const cell = row.getCell(linkColIndex);
+      if (cell.value && typeof cell.value === 'object' && 'hyperlink' in cell.value) {
+        cell.font = { color: { argb: 'FF0000FF' }, underline: true };
+      }
+    });
+  }
+
   // Adjust column widths based on content
   worksheet.columns.forEach((column, i) => {
     let maxLength = 0;

@@ -27,7 +27,7 @@ const STATUS_TAB_MAP: Record<StatusTab, string> = {
   pending: 'new,partially_matched',
   matched: 'fully_matched,approved_no_expense',
   error: 'error',
-  sent: 'sent_to_accountant',
+  sent: '', // handled separately by sentToAccountant=true
   all: '',
 };
 
@@ -63,6 +63,7 @@ export default function InvoiceGrid() {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   // Sort State
   const [sortBy, setSortBy] = useState('created_at');
@@ -95,6 +96,11 @@ export default function InvoiceGrid() {
         const statusParam = STATUS_TAB_MAP[tab];
         const params = new URLSearchParams({ limit: '1', page: '1' });
         if (statusParam) params.set('status', statusParam);
+        if (tab === 'sent') {
+          params.set('sentToAccountant', 'true');
+        } else if (tab !== 'all') {
+          params.set('sentToAccountant', 'false');
+        }
         const res = await fetch(`/api/invoices?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
@@ -115,12 +121,12 @@ export default function InvoiceGrid() {
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
-      const status = STATUS_TAB_MAP[activeTab];
+      const tabStatus = STATUS_TAB_MAP[activeTab];
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
         search,
-        status,
+        status: filterStatus || tabStatus,
         dateFrom,
         dateTo,
         minAmount,
@@ -129,6 +135,12 @@ export default function InvoiceGrid() {
         sortBy,
         sortOrder,
       });
+
+      if (activeTab === 'sent') {
+        queryParams.set('sentToAccountant', 'true');
+      } else if (activeTab !== 'all') {
+        queryParams.set('sentToAccountant', 'false');
+      }
 
       const res = await fetch(`/api/invoices?${queryParams.toString()}`);
       if (!res.ok) {
@@ -378,17 +390,36 @@ export default function InvoiceGrid() {
                 setCategoryId(e.target.value);
                 setPage(1);
               }}
+              style={{ maxWidth: '150px' }}
             >
               <option value="">כל הקטגוריות</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.name}
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.icon} {c.name}
                 </option>
               ))}
             </select>
 
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => {
+                setFilterStatus(e.target.value);
+                setPage(1);
+              }}
+              style={{ maxWidth: '150px' }}
+            >
+              <option value="">כל הסטטוסים</option>
+              <option value="new">חדש</option>
+              <option value="processing">בטיפול</option>
+              <option value="partially_matched">הותאם חלקי</option>
+              <option value="fully_matched">הותאם</option>
+              <option value="approved_no_expense">אושר ללא הוצאה</option>
+              <option value="error">שגיאה</option>
+            </select>
+
             {/* Reset Button */}
-            {(search || dateFrom || dateTo || minAmount || maxAmount || categoryId) && (
+            {(search || dateFrom || dateTo || minAmount || maxAmount || categoryId || filterStatus) && (
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {

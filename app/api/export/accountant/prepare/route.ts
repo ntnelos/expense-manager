@@ -135,6 +135,16 @@ export async function GET(req: Request) {
       'קישור לחשבונית',
     ];
 
+    const translateStatus = (status: string) => {
+      switch (status) {
+        case 'unapproved': return 'ממתין';
+        case 'approved': return 'הותאם';
+        case 'approved_no_invoice': return 'אושר ללא חשבונית';
+        case 'approved_no_expense': return 'אושר ללא הוצאה';
+        default: return status || '';
+      }
+    };
+
     const exportData: any[] = [];
     const uniqueInvoicesToMerge = new Map<string, any>();
     
@@ -159,7 +169,7 @@ export async function GET(req: Request) {
           'מטבע חשבונית': '',
           'מע״מ (חשבונית)': '',
           'קטגוריה': '',
-          'סטטוס התאמה': 'נשלח לרו״ח',
+          'סטטוס התאמה': translateStatus(line.status),
           'קישור לחשבונית': '',
         });
       } else {
@@ -186,8 +196,8 @@ export async function GET(req: Request) {
             'מטבע חשבונית': invoice?.currency || '',
             'מע״מ (חשבונית)': invoice?.vat_amount || '',
             'קטגוריה': invoice?.categories?.name || '',
-            'סטטוס התאמה': 'נשלח לרו״ח',
-            'קישור לחשבונית': invoice?.drive_file_url || '',
+            'סטטוס התאמה': translateStatus(line.status),
+            'קישור לחשבונית': invoice?.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: invoice.drive_file_url } : '',
           });
         });
       }
@@ -211,8 +221,8 @@ export async function GET(req: Request) {
         'מטבע חשבונית': inv.currency || '',
         'מע״מ (חשבונית)': inv.vat_amount || '',
         'קטגוריה': inv.categories?.name || '',
-        'סטטוס התאמה': 'נשלח לרו״ח',
-        'קישור לחשבונית': inv.drive_file_url || '',
+        'סטטוס התאמה': translateStatus(inv.status),
+        'קישור לחשבונית': inv.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: inv.drive_file_url } : '',
       });
     }
     
