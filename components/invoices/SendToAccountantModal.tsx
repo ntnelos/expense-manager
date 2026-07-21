@@ -145,26 +145,14 @@ export default function SendToAccountantModal() {
                 
                   <button 
                     onClick={() => {
-                      const urls = [preparedData.excel.url, ...(preparedData.pdfFiles?.map((p: any) => p.url) || [])];
-                      urls.forEach((url, idx) => {
-                        setTimeout(() => {
-                          const iframe = document.createElement('iframe');
-                          iframe.style.display = 'none';
-                          iframe.src = url;
-                          document.body.appendChild(iframe);
-                          setTimeout(() => {
-                            if (document.body.contains(iframe)) {
-                              document.body.removeChild(iframe);
-                            }
-                          }, 5000);
-                        }, idx * 600);
-                      });
+                      window.open(preparedData.zip.url, '_blank');
                     }}
                     className="btn btn-secondary" 
                     style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)', alignItems: 'center' }}
                   >
                     <span style={{ fontSize: '24px' }}>📥</span>
-                    <span style={{ fontWeight: 'bold' }}>הורדת כל קבצי הייצוא (אקסל + תמונות מרוכזות)</span>
+                    <span style={{ fontWeight: 'bold' }}>הורדת קובץ ZIP מאוחד (אקסל + כל תמונות החשבוניות)</span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>כל הקבצים כווצו לקובץ אחד להורדה מהירה</span>
                   </button>
               </div>
             )}

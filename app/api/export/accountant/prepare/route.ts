@@ -6,6 +6,7 @@ import { generateStyledExcel } from '@/lib/utils/excel';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { Readable } from 'stream';
+import JSZip from 'jszip';
 
 export const maxDuration = 300; // 5 minutes max duration for this endpoint
 
@@ -232,6 +233,7 @@ export async function GET(req: Request) {
     const allUniqueInvoices = Array.from(uniqueInvoicesToMerge.values());
     const invoicesToProcess = allUniqueInvoices.filter((inv: any) => inv.drive_file_id);
     const pdfFiles: { id: string; url: string }[] = [];
+    const pdfBuffersList: Buffer[] = [];
     const timestamp = new Date().getTime();
     
     let mergedPdf = await PDFDocument.create();
@@ -252,6 +254,8 @@ export async function GET(req: Request) {
         if (currentChunkSize + fileBuffer.length > MAX_CHUNK_SIZE_BYTES && currentChunkSize > 0) {
           const mergedPdfBytes = await mergedPdf.save();
           const pdfBuffer = Buffer.from(mergedPdfBytes);
+          pdfBuffersList.push(pdfBuffer);
+          
           chunkIndex++;
           const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
           pdfFiles.push(pdfFile);
@@ -308,6 +312,8 @@ export async function GET(req: Request) {
     if (currentChunkSize > 0 || chunkIndex === 0) {
       const mergedPdfBytes = await mergedPdf.save();
       const pdfBuffer = Buffer.from(mergedPdfBytes);
+      pdfBuffersList.push(pdfBuffer);
+      
       chunkIndex++;
       const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
       pdfFiles.push(pdfFile);
@@ -316,12 +322,23 @@ export async function GET(req: Request) {
     // 3. Upload to Google Drive Temp Folder
     const excelFile = await uploadExportToDrive(drive, `Invoices_${month}_${timestamp}.xlsx`, excelBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
+    // 5. Create a ZIP file for easy downloading
+    const zip = new JSZip();
+    zip.file(`Invoices_${month}_${timestamp}.xlsx`, excelBuffer);
+    pdfBuffersList.forEach((buf, idx) => {
+      zip.file(`Invoices_${month}_part${idx + 1}_${timestamp}.pdf`, buf);
+    });
+    
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'STORE' });
+    const zipFile = await uploadExportToDrive(drive, `Export_${month}_All_${timestamp}.zip`, zipBuffer, 'application/zip');
+
     return NextResponse.json({
       success: true,
       count: allUniqueInvoices.length,
       invoiceIds: allUniqueInvoices.map(i => i.id),
       excel: excelFile,
-      pdfFiles: pdfFiles
+      pdfFiles: pdfFiles,
+      zip: zipFile
     });
 
   } catch (error: any) {
