@@ -215,6 +215,28 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
     }
   };
 
+  const handleUnmatch = async (expenseLineId: string) => {
+    if (!invoice || !confirm('האם אתה בטוח שברצונך לבטל התאמה זו? החשבונית ושורת ההוצאה יחזרו לסטטוס ממתין.')) return;
+    try {
+      const res = await fetch(`/api/matches?invoiceId=${invoice.id}&expenseLineId=${expenseLineId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to unmatch');
+      
+      const data = await res.json();
+      if (data.success) {
+        setMatchedLines(prev => prev.filter(line => line.id !== expenseLineId));
+        // Update local invoice status if returned
+        if (data.invoiceStatus) {
+           onUpdate({ ...invoice, status: data.invoiceStatus } as Invoice);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בביטול התאמה');
+    }
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -616,16 +638,28 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
                     borderRadius: 'var(--radius-md)',
                     marginBottom: 'var(--space-2)',
                     fontSize: 'var(--font-size-sm)',
-                    border: '1px solid var(--color-glass-border)'
+                    border: '1px solid var(--color-glass-border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-2)'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
                       <span>{line.description}</span>
                       <span style={{ color: 'var(--color-accent)' }}>
                         {new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(line.amount)}
                       </span>
                     </div>
-                    <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
-                      תאריך עסקה: {formatToIsraeliDate(line.transaction_date)}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                        תאריך עסקה: {formatToIsraeliDate(line.transaction_date)}
+                      </span>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleUnmatch(line.id)}
+                        style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--color-error)' }}
+                      >
+                        ביטול התאמה 🚫
+                      </button>
                     </div>
                   </div>
                 ))}
