@@ -165,6 +165,15 @@ export default function InvoiceGrid() {
     return () => clearTimeout(handler);
   }, [fetchInvoices]);
 
+  useEffect(() => {
+    const handleCustomUpdate = () => {
+      fetchInvoices();
+      fetchTabCounts();
+    };
+    window.addEventListener('invoices-updated', handleCustomUpdate);
+    return () => window.removeEventListener('invoices-updated', handleCustomUpdate);
+  }, [fetchInvoices, fetchTabCounts]);
+
   const handleInvoiceUpdate = (updatedInvoice: Invoice) => {
     setInvoices((prev) =>
       prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv))

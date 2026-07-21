@@ -80,6 +80,7 @@ export default function SendToAccountantModal() {
     setPreparedData(null);
     setIsSuccess(false);
     setError(null);
+    window.dispatchEvent(new Event('invoices-updated'));
   };
 
   return (
