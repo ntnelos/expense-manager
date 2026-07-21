@@ -233,6 +233,7 @@ export async function renameGoogleDriveFile(fileId: string, newName: string): Pr
       requestBody: {
         name: newName,
       },
+      supportsAllDrives: true,
     });
     console.log(`Successfully renamed Drive file ${fileId} to ${newName}`);
   } catch (err: any) {
