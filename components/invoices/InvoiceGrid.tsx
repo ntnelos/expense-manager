@@ -24,7 +24,7 @@ function formatCurrency(amount: number | null): string {
 type StatusTab = 'pending' | 'matched' | 'error' | 'sent' | 'all';
 
 const STATUS_TAB_MAP: Record<StatusTab, string> = {
-  pending: 'new,partially_matched',
+  pending: 'new,processing,partially_matched',
   matched: 'fully_matched,approved_no_expense',
   error: 'error',
   sent: '', // handled separately by sentToAccountant=true
@@ -155,7 +155,7 @@ export default function InvoiceGrid() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, activeTab, dateFrom, dateTo, minAmount, maxAmount, categoryId, sortBy, sortOrder]);
+  }, [page, limit, search, activeTab, filterStatus, dateFrom, dateTo, minAmount, maxAmount, categoryId, sortBy, sortOrder]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
