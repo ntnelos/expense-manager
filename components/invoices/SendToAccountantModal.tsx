@@ -143,18 +143,22 @@ export default function SendToAccountantModal() {
                   לפני השליחה, מומלץ להוריד ולבדוק את הקבצים שיועברו:
                 </p>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-                  <a href={preparedData.excel.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
-                    <span style={{ fontSize: '24px' }}>📊</span>
-                    <span>אקסל התאמות</span>
-                  </a>
-                  {preparedData.pdfFiles?.map((pdf: any, idx: number) => (
-                    <a key={pdf.id} href={pdf.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
-                      <span style={{ fontSize: '24px' }}>📄</span>
-                      <span>PDF מאוחד (חלק {idx + 1})</span>
-                    </a>
-                  ))}
-                </div>
+                  <button 
+                    onClick={() => {
+                      window.open(preparedData.excel.url, '_blank');
+                      preparedData.pdfFiles?.forEach((pdf: any, idx: number) => {
+                        setTimeout(() => {
+                          window.open(pdf.url, '_blank');
+                        }, (idx + 1) * 500);
+                      });
+                    }}
+                    className="btn btn-secondary" 
+                    style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)', alignItems: 'center' }}
+                  >
+                    <span style={{ fontSize: '24px' }}>📥</span>
+                    <span style={{ fontWeight: 'bold' }}>הורדת כל קבצי הייצוא (אקסל + תמונות מרוכזות)</span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>הדפדפן עשוי לבקש אישור לפתיחת מספר כרטיסיות חדשות (Pop-ups)</span>
+                  </button>
               </div>
             )}
 

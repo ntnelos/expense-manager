@@ -227,18 +227,18 @@ export async function GET(req: Request) {
     
     const excelBuffer = await generateStyledExcel(headers, exportData, 'Invoices');
     
-    // 4. Generate Merged PDFs in Chunks
-    const CHUNK_SIZE = 25;
+    // 4. Generate Merged PDFs in Chunks based on size (12MB max per chunk to be safe for 18MB limit)
+    const MAX_CHUNK_SIZE_BYTES = 12 * 1024 * 1024;
     const allUniqueInvoices = Array.from(uniqueInvoicesToMerge.values());
     const invoicesToProcess = allUniqueInvoices.filter((inv: any) => inv.drive_file_id);
     const pdfFiles: { id: string; url: string }[] = [];
     const timestamp = new Date().getTime();
     
-    for (let i = 0; i < invoicesToProcess.length; i += CHUNK_SIZE) {
-      const chunk = invoicesToProcess.slice(i, i + CHUNK_SIZE);
-      const mergedPdf = await PDFDocument.create();
-
-      for (const inv of chunk) {
+    let mergedPdf = await PDFDocument.create();
+    let currentChunkSize = 0;
+    let chunkIndex = 0;
+    
+    for (const inv of invoicesToProcess) {
       if (!inv.drive_file_id) continue;
       
       try {
@@ -247,6 +247,21 @@ export async function GET(req: Request) {
           { responseType: 'arraybuffer' }
         );
         const fileBuffer = Buffer.from(response.data as ArrayBuffer);
+
+        // If adding this file would exceed the limit (and we already have files in the chunk), save current chunk
+        if (currentChunkSize + fileBuffer.length > MAX_CHUNK_SIZE_BYTES && currentChunkSize > 0) {
+          const mergedPdfBytes = await mergedPdf.save();
+          const pdfBuffer = Buffer.from(mergedPdfBytes);
+          chunkIndex++;
+          const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
+          pdfFiles.push(pdfFile);
+          
+          mergedPdf = await PDFDocument.create();
+          currentChunkSize = 0;
+        }
+
+        currentChunkSize += fileBuffer.length;
+
         const headerText = fileBuffer.toString('ascii', 0, Math.min(1024, fileBuffer.length));
         const isPDF = headerText.includes('%PDF');
         
@@ -287,12 +302,14 @@ export async function GET(req: Request) {
       } catch (e) {
         console.error(`Failed to process file ${inv.drive_file_id}`, e);
       }
-    } // Close inner loop
+    } // Close loop
       
-    const mergedPdfBytes = await mergedPdf.save();
+    // Save the last chunk if not empty
+    if (currentChunkSize > 0 || chunkIndex === 0) {
+      const mergedPdfBytes = await mergedPdf.save();
       const pdfBuffer = Buffer.from(mergedPdfBytes);
-      const partNum = Math.floor(i / CHUNK_SIZE) + 1;
-      const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${partNum}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
+      chunkIndex++;
+      const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
       pdfFiles.push(pdfFile);
     }
 
