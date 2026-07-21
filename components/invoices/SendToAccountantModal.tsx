@@ -49,7 +49,7 @@ export default function SendToAccountantModal() {
         body: JSON.stringify({
           month,
           invoiceIds: preparedData.invoiceIds,
-          pdfFileId: preparedData.pdf.id,
+          pdfFileIds: preparedData.pdfFiles.map((f: any) => f.id),
           excelFileId: preparedData.excel.id
         })
       });
@@ -158,10 +158,12 @@ export default function SendToAccountantModal() {
                     <span style={{ fontSize: '24px' }}>📊</span>
                     <span>אקסל התאמות</span>
                   </a>
-                  <a href={preparedData.pdf.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
-                    <span style={{ fontSize: '24px' }}>📄</span>
-                    <span>PDF מאוחד</span>
-                  </a>
+                  {preparedData.pdfFiles?.map((pdf: any, idx: number) => (
+                    <a key={pdf.id} href={pdf.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: 'flex', flexDirection: 'column', padding: 'var(--space-4)', height: 'auto', gap: 'var(--space-2)' }}>
+                      <span style={{ fontSize: '24px' }}>📄</span>
+                      <span>PDF מאוחד (חלק {idx + 1})</span>
+                    </a>
+                  ))}
                 </div>
               </div>
             )}

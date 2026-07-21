@@ -227,12 +227,18 @@ export async function GET(req: Request) {
     
     const excelBuffer = await generateStyledExcel(headers, exportData, 'Invoices');
     
-    // 4. Generate Merged PDF
-    const mergedPdf = await PDFDocument.create();
+    // 4. Generate Merged PDFs in Chunks
+    const CHUNK_SIZE = 25;
     const allUniqueInvoices = Array.from(uniqueInvoicesToMerge.values());
     const invoicesToProcess = allUniqueInvoices.filter((inv: any) => inv.drive_file_id);
+    const pdfFiles: { id: string; url: string }[] = [];
+    const timestamp = new Date().getTime();
     
-    for (const inv of invoicesToProcess) {
+    for (let i = 0; i < invoicesToProcess.length; i += CHUNK_SIZE) {
+      const chunk = invoicesToProcess.slice(i, i + CHUNK_SIZE);
+      const mergedPdf = await PDFDocument.create();
+
+      for (const inv of chunk) {
       if (!inv.drive_file_id) continue;
       
       try {
@@ -281,22 +287,24 @@ export async function GET(req: Request) {
       } catch (e) {
         console.error(`Failed to process file ${inv.drive_file_id}`, e);
       }
-    }
-    
+    } // Close inner loop
+      
     const mergedPdfBytes = await mergedPdf.save();
-    const pdfBuffer = Buffer.from(mergedPdfBytes);
+      const pdfBuffer = Buffer.from(mergedPdfBytes);
+      const partNum = Math.floor(i / CHUNK_SIZE) + 1;
+      const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${partNum}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
+      pdfFiles.push(pdfFile);
+    }
 
     // 3. Upload to Google Drive Temp Folder
-    const timestamp = new Date().getTime();
     const excelFile = await uploadExportToDrive(drive, `Invoices_${month}_${timestamp}.xlsx`, excelBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
 
     return NextResponse.json({
       success: true,
       count: allUniqueInvoices.length,
       invoiceIds: allUniqueInvoices.map(i => i.id),
       excel: excelFile,
-      pdf: pdfFile
+      pdfFiles: pdfFiles
     });
 
   } catch (error: any) {

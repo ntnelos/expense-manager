@@ -6,9 +6,9 @@ import { getDriveClient } from '@/lib/google/drive';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { month, invoiceIds, pdfFileId, excelFileId } = body;
+    const { month, invoiceIds, pdfFileIds, excelFileId } = body;
 
-    if (!month || !invoiceIds || !pdfFileId || !excelFileId) {
+    if (!month || !invoiceIds || !pdfFileIds || !Array.isArray(pdfFileIds) || !excelFileId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -40,78 +40,96 @@ export async function POST(req: Request) {
     const gmail = google.gmail({ version: 'v1', auth });
     const drive = getDriveClient();
 
-    // 2. Download files from drive
-    const pdfRes = await drive.files.get({ fileId: pdfFileId, alt: 'media', supportsAllDrives: true }, { responseType: 'arraybuffer' });
+    // 2. Download Excel once
     const excelRes = await drive.files.get({ fileId: excelFileId, alt: 'media', supportsAllDrives: true }, { responseType: 'arraybuffer' });
-
-    const pdfBuffer = Buffer.from(pdfRes.data as ArrayBuffer);
     const excelBuffer = Buffer.from(excelRes.data as ArrayBuffer);
 
-    // 3. Check total size
-    const totalSize = pdfBuffer.length + excelBuffer.length;
-    if (totalSize > 18 * 1024 * 1024) { // 18MB
-      return NextResponse.json({ 
-        error: 'הקבצים גדולים מדי לשליחה במייל (מעל 18MB). אנא הורד אותם ושלח עצמאית.',
-        tooLarge: true
-      }, { status: 413 });
-    }
-
-    // 4. Construct raw email message (multipart/mixed)
-    const boundary = 'foo_bar_baz';
     const emailTo = '516638053@rivh.it';
-    const emailSubject = `חשבוניות - חודש ${month}`;
-    
-    let message = [
-      `To: ${emailTo}`,
-      `Subject: =?utf-8?B?${Buffer.from(emailSubject).toString('base64')}?=`,
-      `MIME-Version: 1.0`,
-      `Content-Type: multipart/mixed; boundary=${boundary}`,
-      '',
-      `--${boundary}`,
-      `Content-Type: text/plain; charset="UTF-8"`,
-      '',
-      `מצורפים קבצי החשבוניות ופירוט התאמות לחודש ${month}.`,
-      '',
-      `--${boundary}`,
-      `Content-Type: application/pdf; name="Invoices_${month}.pdf"`,
-      `Content-Disposition: attachment; filename="Invoices_${month}.pdf"`,
-      `Content-Transfer-Encoding: base64`,
-      '',
-      pdfBuffer.toString('base64'),
-      '',
-      `--${boundary}`,
-      `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="Invoices_${month}.xlsx"`,
-      `Content-Disposition: attachment; filename="Invoices_${month}.xlsx"`,
-      `Content-Transfer-Encoding: base64`,
-      '',
-      excelBuffer.toString('base64'),
-      '',
-      `--${boundary}--`
-    ].join('\r\n');
 
-    const encodedMessage = Buffer.from(message)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+    // 3. Loop over PDFs and send emails
+    for (let i = 0; i < pdfFileIds.length; i++) {
+      const pdfId = pdfFileIds[i];
+      const isFirst = i === 0;
+      const totalParts = pdfFileIds.length;
+      
+      const pdfRes = await drive.files.get({ fileId: pdfId, alt: 'media', supportsAllDrives: true }, { responseType: 'arraybuffer' });
+      const pdfBuffer = Buffer.from(pdfRes.data as ArrayBuffer);
 
-    // 5. Send Email
-    try {
-      await gmail.users.messages.send({
-        userId: 'me',
-        requestBody: {
-          raw: encodedMessage,
-        },
-      });
-    } catch (e: any) {
-      console.error("Gmail send error:", e);
-      if (e.message?.includes('unauthorized_client')) {
-        return NextResponse.json({ error: 'שגיאת הרשאות: יש להוסיף הרשאת gmail.send למסוף ה-Workspace (Domain-Wide Delegation).' }, { status: 403 });
+      // Check size for this email
+      const thisEmailSize = pdfBuffer.length + (isFirst ? excelBuffer.length : 0);
+      if (thisEmailSize > 18 * 1024 * 1024) { // 18MB
+        return NextResponse.json({ 
+          error: `קובץ החשבוניות (חלק ${i + 1}) גדול מדי לשליחה במייל (מעל 18MB). אנא הורד אותו ושלח עצמאית.`,
+          tooLarge: true
+        }, { status: 413 });
       }
-      throw e;
+
+      const boundary = 'foo_bar_baz';
+      const emailSubject = totalParts > 1 
+        ? `חשבוניות - חודש ${month} (חלק ${i + 1} מתוך ${totalParts})` 
+        : `חשבוניות - חודש ${month}`;
+      
+      const bodyText = totalParts > 1
+        ? `מצורפים קבצי החשבוניות לחודש ${month} - חלק ${i + 1} מתוך ${totalParts}.\n${isFirst ? 'בקובץ מצורף גם פירוט ההתאמות באקסל.' : ''}`
+        : `מצורפים קבצי החשבוניות ופירוט התאמות לחודש ${month}.`;
+
+      let messageLines = [
+        `To: ${emailTo}`,
+        `Subject: =?utf-8?B?${Buffer.from(emailSubject).toString('base64')}?=`,
+        `MIME-Version: 1.0`,
+        `Content-Type: multipart/mixed; boundary=${boundary}`,
+        '',
+        `--${boundary}`,
+        `Content-Type: text/plain; charset="UTF-8"`,
+        '',
+        bodyText,
+        '',
+        `--${boundary}`,
+        `Content-Type: application/pdf; name="Invoices_${month}_part${i + 1}.pdf"`,
+        `Content-Disposition: attachment; filename="Invoices_${month}_part${i + 1}.pdf"`,
+        `Content-Transfer-Encoding: base64`,
+        '',
+        pdfBuffer.toString('base64'),
+        ''
+      ];
+
+      if (isFirst) {
+        messageLines = messageLines.concat([
+          `--${boundary}`,
+          `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="Invoices_${month}.xlsx"`,
+          `Content-Disposition: attachment; filename="Invoices_${month}.xlsx"`,
+          `Content-Transfer-Encoding: base64`,
+          '',
+          excelBuffer.toString('base64'),
+          ''
+        ]);
+      }
+
+      messageLines.push(`--${boundary}--`);
+      
+      const encodedMessage = Buffer.from(messageLines.join('\r\n'))
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      try {
+        await gmail.users.messages.send({
+          userId: 'me',
+          requestBody: {
+            raw: encodedMessage
+          }
+        });
+      } catch (sendErr: any) {
+        console.error(`Failed to send email part ${i + 1}:`, sendErr);
+        if (sendErr.message?.includes('unauthorized_client')) {
+          return NextResponse.json({ error: 'שגיאת הרשאות: יש להוסיף הרשאת gmail.send למסוף ה-Workspace (Domain-Wide Delegation).' }, { status: 403 });
+        }
+        throw new Error(`שגיאה בשליחת חלק ${i + 1} מתוך ${totalParts}`);
+      }
     }
 
-    // 6. Update sent_to_accountant flag
+    // 4. Update sent_to_accountant flag
     const { error: updateError } = await supabase
       .from('invoices')
       .update({ sent_to_accountant: true })
