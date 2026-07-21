@@ -291,7 +291,18 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
                       <span>{line.description}</span>
-                      <span>{formatCurrency(line.amount)}</span>
+                      <span style={{ color: 'var(--color-accent)', textAlign: 'left' }}>
+                        <div>{formatCurrency(line.amount)}</div>
+                        {line.total_amount && line.total_amount !== line.amount && (
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 400, marginTop: '2px' }}>
+                            {line.currency !== 'ILS'
+                              ? `(${line.total_amount} ${line.currency})`
+                              : `(מתוך ${formatCurrency(line.total_amount)})`
+                            }
+                            {line.installment_current && line.installment_total ? ` (תשלום ${line.installment_current}/${line.installment_total})` : ''}
+                          </div>
+                        )}
+                      </span>
                     </div>
                     <div style={{ color: 'var(--color-text-muted)', fontSize: '11px', marginTop: '2px' }}>
                       תאריך עסקה: {formatToIsraeliDate(line.transaction_date)}

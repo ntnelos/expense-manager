@@ -488,6 +488,7 @@ export default function MatchingArena() {
                     ? `(${line.total_amount} ${line.currency})`
                     : `(מתוך ${formatCurrency(line.total_amount)})`
                   }
+                  {line.installment_current && line.installment_total ? ` (תשלום ${line.installment_current}/${line.installment_total})` : ''}
                 </span>
               )}
             </div>
