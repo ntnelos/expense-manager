@@ -197,6 +197,7 @@ export async function moveInvoiceToDateFolder(fileId: string, newDate: Date): Pr
       fileId,
       addParents: targetFolderId,
       removeParents: previousParents,
+      enforceSingleParent: true,
       fields: 'id, parents',
       supportsAllDrives: true,
     });
