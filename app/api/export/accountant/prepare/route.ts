@@ -86,22 +86,36 @@ export async function GET(req: Request) {
     const nextYear = endMonth === 12 ? endYear + 1 : endYear;
     const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
 
-    const { data: invoices, error: invError } = await supabase
+    // 1. Fetch matched expense lines
+    let query = supabase
+      .from('expense_lines')
+      .select('*, matches(invoice:invoices(*, categories(name)))')
+      .in('status', ['fully_matched', 'approved_no_expense']);
+      
+    // Filter by charge_date (or transaction_date if null)
+    query = query.or(`and(charge_date.gte.${startDate},charge_date.lt.${endDate}),and(charge_date.is.null,transaction_date.gte.${startDate},transaction_date.lt.${endDate})`);
+    query = query.order('transaction_date', { ascending: false });
+
+    const { data: expenseLines, error: expError } = await query;
+    if (expError) throw expError;
+
+    // 2. Fetch approved_no_expense invoices (which have no expense line)
+    const { data: standaloneInvoices, error: invError } = await supabase
       .from('invoices')
-      .select('*, matches(expense_lines(*)), categories(name)')
-      .in('status', ['fully_matched', 'approved_no_expense'])
+      .select('*, categories(name)')
+      .eq('status', 'approved_no_expense')
       .gte('invoice_date', startDate)
-      .lt('invoice_date', endDate)
-      .order('invoice_date', { ascending: true });
+      .lt('invoice_date', endDate);
 
     if (invError) throw invError;
-    if (!invoices || invoices.length === 0) {
-      return NextResponse.json({ error: 'לא נמצאו חשבוניות מותאמות בחודש זה' }, { status: 400 });
+
+    if ((!expenseLines || expenseLines.length === 0) && (!standaloneInvoices || standaloneInvoices.length === 0)) {
+      return NextResponse.json({ error: 'לא נמצאו נתונים בחודש זה' }, { status: 400 });
     }
 
     const drive = getDriveClient();
     
-    // 1. Generate Excel
+    // 3. Generate Excel
     const headers = [
       'תאריך עסקה (הוצאה)',
       'תאריך חיוב (הוצאה)',
@@ -122,62 +136,94 @@ export async function GET(req: Request) {
     ];
 
     const exportData: any[] = [];
+    const uniqueInvoicesToMerge = new Map<string, any>();
     
-    invoices.forEach(inv => {
-      const rawMatches = inv.matches;
+    // Process Expense Lines
+    for (const line of expenseLines || []) {
+      const rawMatches = line.matches;
       const matches = Array.isArray(rawMatches) ? rawMatches : rawMatches ? [rawMatches] : [];
       
       if (matches.length === 0) {
         exportData.push({
-          'תאריך עסקה (הוצאה)': '',
-          'תאריך חיוב (הוצאה)': '',
-          'סכום חיוב (הוצאה)': '',
-          'סכום עסקה (הוצאה)': '',
-          'פירוט בנק (הוצאה)': '',
-          'הערה / סיבת אישור': '',
-          'שם ספק (חשבונית)': inv.supplier_name || '',
-          'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
-          'מספר חשבונית': inv.invoice_number || '',
-          'תאריך חשבונית': inv.invoice_date || '',
-          'סכום חשבונית': inv.total_amount || '',
-          'מטבע חשבונית': inv.currency || '',
-          'מע״מ (חשבונית)': inv.vat_amount || '',
-          'קטגוריה': inv.categories?.name || '',
+          'תאריך עסקה (הוצאה)': line.transaction_date || '',
+          'תאריך חיוב (הוצאה)': line.charge_date || '',
+          'סכום חיוב (הוצאה)': line.amount || '',
+          'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
+          'פירוט בנק (הוצאה)': line.description || '',
+          'הערה / סיבת אישור': line.approval_note || '',
+          'שם ספק (חשבונית)': '',
+          'ח.פ/עוסק (חשבונית)': '',
+          'מספר חשבונית': '',
+          'תאריך חשבונית': '',
+          'סכום חשבונית': '',
+          'מטבע חשבונית': '',
+          'מע״מ (חשבונית)': '',
+          'קטגוריה': '',
           'סטטוס התאמה': 'נשלח לרו״ח',
-          'קישור לחשבונית': inv.drive_file_url || '',
+          'קישור לחשבונית': '',
         });
       } else {
         matches.forEach((match: any, index: number) => {
-          const line = match.expense_lines;
+          const invoice = match.invoice;
           const isDuplicate = index > 0;
+          
+          if (invoice) {
+            uniqueInvoicesToMerge.set(invoice.id, invoice);
+          }
+
           exportData.push({
-            'תאריך עסקה (הוצאה)': line?.transaction_date || '',
-            'תאריך חיוב (הוצאה)': line?.charge_date || '',
-            'סכום חיוב (הוצאה)': isDuplicate ? `${line?.amount} (העתק)` : line?.amount || '',
-            'סכום עסקה (הוצאה)': line?.total_amount || line?.amount || '',
-            'פירוט בנק (הוצאה)': isDuplicate ? `${line?.description} (העתק)` : line?.description || '',
-            'הערה / סיבת אישור': line?.approval_note || '',
-            'שם ספק (חשבונית)': inv.supplier_name || '',
-            'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
-            'מספר חשבונית': inv.invoice_number || '',
-            'תאריך חשבונית': inv.invoice_date || '',
-            'סכום חשבונית': inv.total_amount || '',
-            'מטבע חשבונית': inv.currency || '',
-            'מע״מ (חשבונית)': inv.vat_amount || '',
-            'קטגוריה': inv.categories?.name || '',
+            'תאריך עסקה (הוצאה)': line.transaction_date || '',
+            'תאריך חיוב (הוצאה)': line.charge_date || '',
+            'סכום חיוב (הוצאה)': isDuplicate ? `${line.amount} (העתק)` : line.amount,
+            'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
+            'פירוט בנק (הוצאה)': isDuplicate ? `${line.description} (העתק)` : line.description,
+            'הערה / סיבת אישור': line.approval_note || '',
+            'שם ספק (חשבונית)': invoice?.supplier_name || '',
+            'ח.פ/עוסק (חשבונית)': invoice?.supplier_tax_id || '',
+            'מספר חשבונית': invoice?.invoice_number || '',
+            'תאריך חשבונית': invoice?.invoice_date || '',
+            'סכום חשבונית': invoice?.total_amount || '',
+            'מטבע חשבונית': invoice?.currency || '',
+            'מע״מ (חשבונית)': invoice?.vat_amount || '',
+            'קטגוריה': invoice?.categories?.name || '',
             'סטטוס התאמה': 'נשלח לרו״ח',
-            'קישור לחשבונית': inv.drive_file_url || '',
+            'קישור לחשבונית': invoice?.drive_file_url || '',
           });
         });
       }
-    });
+    }
+
+    // Process Standalone Invoices (approved_no_expense)
+    for (const inv of standaloneInvoices || []) {
+      uniqueInvoicesToMerge.set(inv.id, inv);
+      exportData.push({
+        'תאריך עסקה (הוצאה)': '',
+        'תאריך חיוב (הוצאה)': '',
+        'סכום חיוב (הוצאה)': '',
+        'סכום עסקה (הוצאה)': '',
+        'פירוט בנק (הוצאה)': '',
+        'הערה / סיבת אישור': '',
+        'שם ספק (חשבונית)': inv.supplier_name || '',
+        'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
+        'מספר חשבונית': inv.invoice_number || '',
+        'תאריך חשבונית': inv.invoice_date || '',
+        'סכום חשבונית': inv.total_amount || '',
+        'מטבע חשבונית': inv.currency || '',
+        'מע״מ (חשבונית)': inv.vat_amount || '',
+        'קטגוריה': inv.categories?.name || '',
+        'סטטוס התאמה': 'נשלח לרו״ח',
+        'קישור לחשבונית': inv.drive_file_url || '',
+      });
+    }
     
     const excelBuffer = await generateStyledExcel(headers, exportData, 'Invoices');
     
-    // 2. Generate Merged PDF
+    // 4. Generate Merged PDF
     const mergedPdf = await PDFDocument.create();
+    const allUniqueInvoices = Array.from(uniqueInvoicesToMerge.values());
+    const invoicesToProcess = allUniqueInvoices.filter((inv: any) => inv.drive_file_id);
     
-    for (const inv of invoices) {
+    for (const inv of invoicesToProcess) {
       if (!inv.drive_file_id) continue;
       
       try {
@@ -223,8 +269,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      count: invoices.length,
-      invoiceIds: invoices.map(i => i.id),
+      count: allUniqueInvoices.length,
+      invoiceIds: allUniqueInvoices.map(i => i.id),
       excel: excelFile,
       pdf: pdfFile
     });
