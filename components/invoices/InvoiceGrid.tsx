@@ -298,7 +298,7 @@ export default function InvoiceGrid() {
     <div>
       {/* Status Tabs */}
       <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--color-glass-border)', marginBottom: 'var(--space-4)' }}>
-        {(['pending', 'matched', 'error', 'all'] as StatusTab[]).map((tab) => (
+        {(['pending', 'matched', 'sent', 'error', 'all'] as StatusTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabChange(tab)}
