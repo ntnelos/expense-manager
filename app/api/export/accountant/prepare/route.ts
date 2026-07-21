@@ -75,8 +75,8 @@ export async function GET(req: Request) {
 
     const { data: invoices, error: invError } = await supabase
       .from('invoices')
-      .select('*, expense_lines(*), categories(name)')
-      .eq('status', 'matched')
+      .select('*, matches(expense_lines(*)), categories(name)')
+      .in('status', ['fully_matched', 'approved_no_expense'])
       .gte('invoice_date', startDate)
       .lt('invoice_date', endDate)
       .order('invoice_date', { ascending: true });
@@ -91,8 +91,8 @@ export async function GET(req: Request) {
     // 1. Generate Excel
     const wb = XLSX.utils.book_new();
     const exportData = invoices.map(inv => {
-      // Find related expense line if any
-      const el = inv.expense_lines && inv.expense_lines.length > 0 ? inv.expense_lines[0] : null;
+      // Find related expense line if any via matches table
+      const el = inv.matches && inv.matches.length > 0 && inv.matches[0].expense_lines ? inv.matches[0].expense_lines : null;
       return {
         'תאריך החשבונית': inv.invoice_date,
         'תאריך חיוב': el?.charge_date || '',
