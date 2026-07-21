@@ -2,6 +2,39 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { moveInvoiceDriveStatus } from '@/lib/google/drive';
 
+// Helper to fix trigger issues with negative amounts (credit notes)
+async function recalculateInvoiceStatus(supabase: any, invoiceId: string) {
+  const { data: invoice } = await supabase
+    .from('invoices')
+    .select('id, total_amount, matched_amount, status, drive_file_id, invoice_date')
+    .eq('id', invoiceId)
+    .single();
+
+  if (!invoice) return null;
+
+  let newStatus = 'new';
+  const v_matched = invoice.matched_amount || 0;
+  const v_invoice_total = invoice.total_amount || 0;
+
+  if (v_matched === 0) {
+    newStatus = 'new';
+  } else if (Math.abs(v_matched) >= Math.abs(v_invoice_total)) {
+    newStatus = 'fully_matched';
+  } else {
+    newStatus = 'partially_matched';
+  }
+
+  if (newStatus !== invoice.status) {
+    await supabase
+      .from('invoices')
+      .update({ status: newStatus })
+      .eq('id', invoiceId);
+    invoice.status = newStatus;
+  }
+  
+  return invoice;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -60,14 +93,10 @@ export async function POST(req: Request) {
       throw error;
     }
 
-    // Move file in Google Drive to "matched" folder
-    const { data: invoice } = await supabase
-      .from('invoices')
-      .select('drive_file_id, invoice_date')
-      .eq('id', invoice_id)
-      .single();
+    // Fix DB trigger bug for negative amounts and move file
+    const invoice = await recalculateInvoiceStatus(supabase, invoice_id);
       
-    if (invoice?.drive_file_id) {
+    if (invoice?.drive_file_id && invoice.status !== 'new') {
       const dateToUse = invoice.invoice_date ? new Date(invoice.invoice_date) : new Date();
       moveInvoiceDriveStatus(invoice.drive_file_id, dateToUse, 'matched').catch(console.error);
     }
@@ -106,11 +135,7 @@ export async function DELETE(req: Request) {
 
     // Move file in Google Drive back to "not_matched" folder ONLY if the invoice has no other matches
     if (match?.invoice_id) {
-      const { data: invoice } = await supabase
-        .from('invoices')
-        .select('drive_file_id, invoice_date, status')
-        .eq('id', match.invoice_id)
-        .single();
+      const invoice = await recalculateInvoiceStatus(supabase, match.invoice_id);
         
       if (invoice?.drive_file_id && invoice.status === 'new') {
         const dateToUse = invoice.invoice_date ? new Date(invoice.invoice_date) : new Date();
