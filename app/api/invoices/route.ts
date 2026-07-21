@@ -138,25 +138,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Update Google Drive if properties changed
+    // Update Google Drive (always sync on edit to fix old mismatched files)
     if (currentInvoice && currentInvoice.drive_file_id) {
       try {
-        const dateChanged = allowedUpdates.invoice_date && currentInvoice.invoice_date !== allowedUpdates.invoice_date;
-        const supplierChanged = allowedUpdates.supplier_name && currentInvoice.supplier_name !== allowedUpdates.supplier_name;
+        const supplier = (allowedUpdates.supplier_name || currentInvoice.supplier_name || 'Unknown').replace(/[/\\?%*:|"<>]/g, '');
+        const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
+        const invoiceDate = allowedUpdates.invoice_date || currentInvoice.invoice_date || new Date().toISOString().split('T')[0];
+        const newFilename = `${supplier}_${invoiceDate}.${ext}`;
+        
+        await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
 
-        if (dateChanged || supplierChanged) {
-          const supplier = (allowedUpdates.supplier_name || currentInvoice.supplier_name || 'Unknown').replace(/[/\\?%*:|"<>]/g, '');
-          const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
-          const invoiceDate = allowedUpdates.invoice_date || currentInvoice.invoice_date || new Date().toISOString().split('T')[0];
-          const newFilename = `${supplier}_${invoiceDate}.${ext}`;
-          
-          await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
-
-          if (dateChanged) {
-            const dateToUse = new Date(invoiceDate);
-            await moveInvoiceToDateFolder(currentInvoice.drive_file_id, dateToUse);
-          }
-        }
+        const dateToUse = new Date(invoiceDate);
+        await moveInvoiceToDateFolder(currentInvoice.drive_file_id, dateToUse);
       } catch (driveErr) {
         console.error('Failed to update Drive for edited invoice:', driveErr);
       }

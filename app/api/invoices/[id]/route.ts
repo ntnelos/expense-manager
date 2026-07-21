@@ -51,25 +51,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // 4. Update Google Drive if properties changed
     if (currentInvoice.drive_file_id) {
       try {
-        const dateChanged = currentInvoice.invoice_date !== updatedInvoice.invoice_date;
-        const supplierChanged = currentInvoice.supplier_name !== updatedInvoice.supplier_name;
-        const wasError = currentInvoice.status === 'error';
+        // Always try to rename and move to ensure consistency, especially if the user is saving to fix an old mismatch
+        const supplier = updatedInvoice.supplier_name ? updatedInvoice.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown';
+        const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
+        const invoiceDate = updatedInvoice.invoice_date || new Date().toISOString().split('T')[0];
+        const newFilename = `${supplier}_${invoiceDate}.${ext}`;
+        
+        await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
 
-        if (dateChanged || supplierChanged || wasError) {
-          // Rename file
-          const supplier = updatedInvoice.supplier_name ? updatedInvoice.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown';
-          const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
-          const invoiceDate = updatedInvoice.invoice_date || new Date().toISOString().split('T')[0];
-          const newFilename = `${supplier}_${invoiceDate}.${ext}`;
-          
-          await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
-
-          // Move to new date folder if date changed or was error
-          if (dateChanged || wasError) {
-            const dateToUse = updatedInvoice.invoice_date ? new Date(updatedInvoice.invoice_date) : new Date();
-            await moveInvoiceToDateFolder(currentInvoice.drive_file_id, dateToUse);
-          }
-        }
+        const dateToUse = updatedInvoice.invoice_date ? new Date(updatedInvoice.invoice_date) : new Date();
+        await moveInvoiceToDateFolder(currentInvoice.drive_file_id, dateToUse);
       } catch (driveErr) {
         console.error('Failed to update Drive for edited invoice:', driveErr);
         // We don't fail the request, since DB updated successfully
