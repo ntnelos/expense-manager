@@ -48,7 +48,15 @@ export async function POST(req: Request) {
 
     const emailTo = '516638053@rivh.it';
 
-    // 3. Loop over PDFs and send emails
+    // 3. Update sent_to_accountant flag early, so even if some emails fail, the user doesn't lose the status
+    const { error: updateError } = await supabase
+      .from('invoices')
+      .update({ sent_to_accountant: true })
+      .in('id', invoiceIds);
+
+    if (updateError) throw updateError;
+
+    // 4. Loop over PDFs and send emails
     for (let i = 0; i < pdfFileIds.length; i++) {
       const pdfId = pdfFileIds[i];
       const isFirst = i === 0;
@@ -135,14 +143,6 @@ export async function POST(req: Request) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-
-    // 4. Update sent_to_accountant flag
-    const { error: updateError } = await supabase
-      .from('invoices')
-      .update({ sent_to_accountant: true })
-      .in('id', invoiceIds);
-
-    if (updateError) throw updateError;
 
     return NextResponse.json({ success: true });
 

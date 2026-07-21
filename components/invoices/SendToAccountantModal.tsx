@@ -58,16 +58,6 @@ export default function SendToAccountantModal() {
       
       if (!res.ok) {
         if (data.tooLarge) {
-          // Manually update status without sending email
-          const updateRes = await fetch('/api/invoices', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ids: preparedData.invoiceIds,
-              updates: { status: 'sent_to_accountant' }
-            })
-          });
-          if (!updateRes.ok) throw new Error('Failed to update status manually');
           setError(data.error); // Show the too large error as a warning/info
         } else {
           throw new Error(data.error || 'Failed to send email');
