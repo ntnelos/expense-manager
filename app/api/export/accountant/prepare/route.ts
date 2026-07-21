@@ -90,7 +90,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from('expense_lines')
       .select('*, matches(invoice:invoices(*, categories(name)))')
-      .in('status', ['fully_matched', 'approved_no_expense']);
+      .in('status', ['approved', 'approved_no_invoice']);
       
     // Filter by charge_date (or transaction_date if null)
     query = query.or(`and(charge_date.gte.${startDate},charge_date.lt.${endDate}),and(charge_date.is.null,transaction_date.gte.${startDate},transaction_date.lt.${endDate})`);
