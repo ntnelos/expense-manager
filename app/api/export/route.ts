@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import * as XLSX from 'xlsx';
+import { generateStyledExcel } from '@/lib/utils/excel';
 
 export async function GET(req: Request) {
   try {
@@ -112,15 +113,28 @@ export async function GET(req: Request) {
       }
     }
 
-    // Create a new workbook and worksheet
-    const worksheet = XLSX.utils.json_to_sheet(excelRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Expenses");
+    const headers = [
+      'תאריך עסקה (הוצאה)',
+      'תאריך חיוב (הוצאה)',
+      'סכום חיוב (הוצאה)',
+      'סכום עסקה (הוצאה)',
+      'פירוט בנק (הוצאה)',
+      'הערה / סיבת אישור',
+      'שם ספק (חשבונית)',
+      'ח.פ/עוסק (חשבונית)',
+      'מספר חשבונית',
+      'תאריך חשבונית',
+      'סכום חשבונית',
+      'מטבע חשבונית',
+      'מע״מ (חשבונית)',
+      'קטגוריה',
+      'סטטוס התאמה',
+      'קישור לחשבונית',
+    ];
 
-    // Generate buffer
-    const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await generateStyledExcel(headers, excelRows, 'Expenses');
 
-    return new NextResponse(buf, {
+    return new NextResponse(buf as any, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

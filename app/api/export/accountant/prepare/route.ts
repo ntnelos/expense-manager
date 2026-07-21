@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getDriveClient } from '@/lib/google/drive';
 import * as XLSX from 'xlsx';
+import { generateStyledExcel } from '@/lib/utils/excel';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { Readable } from 'stream';
 
 export const maxDuration = 300; // 5 minutes max duration for this endpoint
 
-async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer, mimeType: string): Promise<{ id: string; url: string }> {
+async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer | Uint8Array, mimeType: string): Promise<{ id: string; url: string }> {
   // First, find or create 'Exports' folder in root
   const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   let exportsFolderId;
@@ -28,7 +29,7 @@ async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer,
   }
 
   const stream = new Readable();
-  stream.push(buffer);
+  stream.push(Buffer.from(buffer));
   stream.push(null);
 
   const file = await drive.files.create({
@@ -89,25 +90,77 @@ export async function GET(req: Request) {
     const drive = getDriveClient();
     
     // 1. Generate Excel
-    const wb = XLSX.utils.book_new();
-    const exportData = invoices.map(inv => {
-      // Find related expense line if any via matches table
-      const el = inv.matches && inv.matches.length > 0 && inv.matches[0].expense_lines ? inv.matches[0].expense_lines : null;
-      return {
-        'תאריך החשבונית': inv.invoice_date,
-        'תאריך חיוב': el?.charge_date || '',
-        'ספק': inv.supplier_name,
-        'סכום החשבונית': inv.amount || '',
-        'מטבע החשבונית': inv.currency || 'ILS',
-        'קטגוריה': inv.categories?.name || 'לא ידוע',
-        'סטטוס התאמה': 'נשלח לרו״ח',
-        'הוצאה מוכרת': inv.recognized_expense ? 'כן' : 'לא',
-        'הערות': el?.notes || '',
-      };
+    const headers = [
+      'תאריך עסקה (הוצאה)',
+      'תאריך חיוב (הוצאה)',
+      'סכום חיוב (הוצאה)',
+      'סכום עסקה (הוצאה)',
+      'פירוט בנק (הוצאה)',
+      'הערה / סיבת אישור',
+      'שם ספק (חשבונית)',
+      'ח.פ/עוסק (חשבונית)',
+      'מספר חשבונית',
+      'תאריך חשבונית',
+      'סכום חשבונית',
+      'מטבע חשבונית',
+      'מע״מ (חשבונית)',
+      'קטגוריה',
+      'סטטוס התאמה',
+      'קישור לחשבונית',
+    ];
+
+    const exportData: any[] = [];
+    
+    invoices.forEach(inv => {
+      const rawMatches = inv.matches;
+      const matches = Array.isArray(rawMatches) ? rawMatches : rawMatches ? [rawMatches] : [];
+      
+      if (matches.length === 0) {
+        exportData.push({
+          'תאריך עסקה (הוצאה)': '',
+          'תאריך חיוב (הוצאה)': '',
+          'סכום חיוב (הוצאה)': '',
+          'סכום עסקה (הוצאה)': '',
+          'פירוט בנק (הוצאה)': '',
+          'הערה / סיבת אישור': '',
+          'שם ספק (חשבונית)': inv.supplier_name || '',
+          'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
+          'מספר חשבונית': inv.invoice_number || '',
+          'תאריך חשבונית': inv.invoice_date || '',
+          'סכום חשבונית': inv.total_amount || '',
+          'מטבע חשבונית': inv.currency || '',
+          'מע״מ (חשבונית)': inv.vat_amount || '',
+          'קטגוריה': inv.categories?.name || '',
+          'סטטוס התאמה': 'נשלח לרו״ח',
+          'קישור לחשבונית': inv.drive_file_url || '',
+        });
+      } else {
+        matches.forEach((match: any, index: number) => {
+          const line = match.expense_lines;
+          const isDuplicate = index > 0;
+          exportData.push({
+            'תאריך עסקה (הוצאה)': line?.transaction_date || '',
+            'תאריך חיוב (הוצאה)': line?.charge_date || '',
+            'סכום חיוב (הוצאה)': isDuplicate ? `${line?.amount} (העתק)` : line?.amount || '',
+            'סכום עסקה (הוצאה)': line?.total_amount || line?.amount || '',
+            'פירוט בנק (הוצאה)': isDuplicate ? `${line?.description} (העתק)` : line?.description || '',
+            'הערה / סיבת אישור': line?.approval_note || '',
+            'שם ספק (חשבונית)': inv.supplier_name || '',
+            'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
+            'מספר חשבונית': inv.invoice_number || '',
+            'תאריך חשבונית': inv.invoice_date || '',
+            'סכום חשבונית': inv.total_amount || '',
+            'מטבע חשבונית': inv.currency || '',
+            'מע״מ (חשבונית)': inv.vat_amount || '',
+            'קטגוריה': inv.categories?.name || '',
+            'סטטוס התאמה': 'נשלח לרו״ח',
+            'קישור לחשבונית': inv.drive_file_url || '',
+          });
+        });
+      }
     });
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    XLSX.utils.book_append_sheet(wb, ws, "Invoices");
-    const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    const excelBuffer = await generateStyledExcel(headers, exportData, 'Invoices');
     
     // 2. Generate Merged PDF
     const mergedPdf = await PDFDocument.create();
@@ -121,14 +174,14 @@ export async function GET(req: Request) {
           { responseType: 'arraybuffer' }
         );
         const fileBuffer = Buffer.from(response.data as ArrayBuffer);
-        const ext = inv.original_filename?.toLowerCase().split('.').pop() || '';
+        const isPDF = fileBuffer.length > 4 && fileBuffer.subarray(0, 4).toString('utf-8') === '%PDF';
         
-        if (ext === 'pdf' || response.headers['content-type'] === 'application/pdf') {
+        if (isPDF) {
           const donorPdf = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
           const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
           copiedPages.forEach(page => mergedPdf.addPage(page));
-        } else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) || response.headers['content-type']?.startsWith('image/')) {
-          // Compress image
+        } else {
+          // Compress image (assumes not PDF = image)
           const compressedImg = await sharp(fileBuffer)
             .resize({ width: 1200, withoutEnlargement: true })
             .jpeg({ quality: 80 })
