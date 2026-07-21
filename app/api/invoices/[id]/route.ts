@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import { renameGoogleDriveFile, moveInvoiceDriveStatus } from '@/lib/google/drive';
+import { renameGoogleDriveFile, moveInvoiceToDateFolder } from '@/lib/google/drive';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -48,22 +48,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     if (updateError) throw updateError;
 
-    // 4. Update Google Drive if it was an error
-    if (currentInvoice.status === 'error' && currentInvoice.drive_file_id) {
+    // 4. Update Google Drive if properties changed
+    if (currentInvoice.drive_file_id) {
       try {
-        // Rename file
-        const supplier = updatedInvoice.supplier_name ? updatedInvoice.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown';
-        const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
-        const invoiceDate = updatedInvoice.invoice_date || new Date().toISOString().split('T')[0];
-        const newFilename = `${supplier} - ${invoiceDate}.${ext}`;
-        
-        await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
+        const dateChanged = currentInvoice.invoice_date !== updatedInvoice.invoice_date;
+        const supplierChanged = currentInvoice.supplier_name !== updatedInvoice.supplier_name;
+        const wasError = currentInvoice.status === 'error';
 
-        // Move from error to not_matched
-        const dateToUse = updatedInvoice.invoice_date ? new Date(updatedInvoice.invoice_date) : new Date();
-        await moveInvoiceDriveStatus(currentInvoice.drive_file_id, dateToUse, 'not_matched');
+        if (dateChanged || supplierChanged || wasError) {
+          // Rename file
+          const supplier = updatedInvoice.supplier_name ? updatedInvoice.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown';
+          const ext = currentInvoice.original_filename?.split('.').pop() || 'pdf';
+          const invoiceDate = updatedInvoice.invoice_date || new Date().toISOString().split('T')[0];
+          const newFilename = `${supplier}_${invoiceDate}.${ext}`;
+          
+          await renameGoogleDriveFile(currentInvoice.drive_file_id, newFilename);
+
+          // Move to new date folder if date changed or was error
+          if (dateChanged || wasError) {
+            const dateToUse = updatedInvoice.invoice_date ? new Date(updatedInvoice.invoice_date) : new Date();
+            await moveInvoiceToDateFolder(currentInvoice.drive_file_id, dateToUse);
+          }
+        }
       } catch (driveErr) {
-        console.error('Failed to update Drive for manually identified invoice:', driveErr);
+        console.error('Failed to update Drive for edited invoice:', driveErr);
         // We don't fail the request, since DB updated successfully
       }
     }

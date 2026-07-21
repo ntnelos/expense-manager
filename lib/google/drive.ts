@@ -176,17 +176,49 @@ export async function deleteFromGoogleDrive(fileId: string): Promise<void> {
 }
 
 /**
+ * Moves an existing Drive file to the correct Year/Month folder for its date.
+ */
+export async function moveInvoiceToDateFolder(fileId: string, newDate: Date): Promise<void> {
+  const drive = getDriveClient();
+  try {
+    // 1. Get the target folder for the new date
+    const targetFolderId = await getTargetFolderId(drive, newDate);
+
+    // 2. Retrieve the existing parents to remove
+    const file = await drive.files.get({
+      fileId,
+      fields: 'parents',
+      supportsAllDrives: true,
+    });
+    
+    // Move the file to the new folder
+    const previousParents = file.data.parents ? file.data.parents.join(',') : '';
+    await drive.files.update({
+      fileId,
+      addParents: targetFolderId,
+      removeParents: previousParents,
+      fields: 'id, parents',
+      supportsAllDrives: true,
+    });
+    
+    console.log(`Successfully moved file ${fileId} to target folder for date ${newDate.toISOString()}`);
+  } catch (err: any) {
+    console.error(`Failed to move Drive file ${fileId} to new folder:`, err);
+    throw err;
+  }
+}
+
+/**
  * Moves an existing Drive file to the target status folder for its date.
+ * Deprecated: We no longer use status folders. Use moveInvoiceToDateFolder instead if date changes.
  */
 export async function moveInvoiceDriveStatus(
   fileId: string, 
   date: Date, 
   newStatus: 'matched' | 'not_matched' | 'error'
 ): Promise<void> {
-  // Drive logic changed: we no longer move files between status folders.
-  // Files stay in their Year/Month folder.
-  console.log(`moveInvoiceDriveStatus called for ${fileId}, but moving files is now disabled.`);
-  return Promise.resolve();
+  console.log(`moveInvoiceDriveStatus called for ${fileId}, ignoring status and moving to date folder instead.`);
+  await moveInvoiceToDateFolder(fileId, date);
 }
 
 /**
