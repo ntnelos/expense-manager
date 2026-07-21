@@ -28,6 +28,18 @@ async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer 
     exportsFolderId = folder.data.id;
   }
 
+  // Cleanup old files (>24h)
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const cleanupQuery = `'${exportsFolderId}' in parents and createdTime < '${oneDayAgo}' and trashed=false`;
+    const oldFiles = await drive.files.list({ q: cleanupQuery, fields: 'files(id)', supportsAllDrives: true, includeItemsFromAllDrives: true });
+    for (const f of oldFiles.data.files || []) {
+      if (f.id) await drive.files.delete({ fileId: f.id, supportsAllDrives: true }).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Failed to cleanup old exports', e);
+  }
+
   const stream = new Readable();
   stream.push(Buffer.from(buffer));
   stream.push(null);
@@ -41,7 +53,7 @@ async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer 
       mimeType,
       body: stream,
     },
-    fields: 'id, webViewLink',
+    fields: 'id, webViewLink, webContentLink',
     supportsAllDrives: true,
   });
   
@@ -52,7 +64,7 @@ async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer 
     supportsAllDrives: true
   });
 
-  return { id: file.data.id, url: file.data.webViewLink };
+  return { id: file.data.id, url: file.data.webContentLink || file.data.webViewLink };
 }
 
 export async function GET(req: Request) {
@@ -174,7 +186,7 @@ export async function GET(req: Request) {
           { responseType: 'arraybuffer' }
         );
         const fileBuffer = Buffer.from(response.data as ArrayBuffer);
-        const isPDF = fileBuffer.length > 4 && fileBuffer.subarray(0, 4).toString('utf-8') === '%PDF';
+        const isPDF = fileBuffer.length > 4 && fileBuffer.subarray(0, Math.min(1024, fileBuffer.length)).indexOf('%PDF') !== -1;
         
         if (isPDF) {
           const donorPdf = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
@@ -182,15 +194,19 @@ export async function GET(req: Request) {
           copiedPages.forEach(page => mergedPdf.addPage(page));
         } else {
           // Compress image (assumes not PDF = image)
-          const compressedImg = await sharp(fileBuffer)
-            .resize({ width: 1200, withoutEnlargement: true })
-            .jpeg({ quality: 80 })
-            .toBuffer();
-            
-          const img = await mergedPdf.embedJpg(compressedImg);
-          const { width, height } = img.scale(1);
-          const page = mergedPdf.addPage([width, height]);
-          page.drawImage(img, { x: 0, y: 0, width, height });
+          try {
+            const compressedImg = await sharp(fileBuffer)
+              .resize({ width: 1200, withoutEnlargement: true })
+              .jpeg({ quality: 80 })
+              .toBuffer();
+              
+            const img = await mergedPdf.embedJpg(compressedImg);
+            const { width, height } = img.scale(1);
+            const page = mergedPdf.addPage([width, height]);
+            page.drawImage(img, { x: 0, y: 0, width, height });
+          } catch (sharpError) {
+            console.error(`Failed to process image with sharp for file ${inv.drive_file_id}:`, sharpError);
+          }
         }
       } catch (e) {
         console.error(`Failed to process file ${inv.drive_file_id}`, e);

@@ -43,6 +43,36 @@ export async function generateStyledExcel(headers: string[], rows: any[], sheetN
     to: { row: rows.length + 1, column: headers.length }
   };
 
+  // Color code status column
+  const statusColIndex = headers.indexOf('סטטוס התאמה') + 1;
+  if (statusColIndex > 0) {
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header
+      const cell = row.getCell(statusColIndex);
+      const val = cell.value?.toString() || '';
+      
+      let color = '';
+      if (val === 'הותאם' || val === 'נשלח לרו״ח') {
+        color = 'FFDCFCE7'; // Light green
+        cell.font = { color: { argb: 'FF166534' } }; // Dark green
+      } else if (val === 'ממתין') {
+        color = 'FFFEF9C3'; // Light yellow
+        cell.font = { color: { argb: 'FF854D0E' } }; // Dark yellow
+      } else if (val === 'אושר ללא חשבונית' || val === 'חלקי') {
+        color = 'FFDBEAFE'; // Light blue
+        cell.font = { color: { argb: 'FF1E40AF' } }; // Dark blue
+      }
+      
+      if (color) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: color }
+        };
+      }
+    });
+  }
+
   // Adjust column widths based on content
   worksheet.columns.forEach((column, i) => {
     let maxLength = 0;
