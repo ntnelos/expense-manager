@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase/server';
 import { google } from 'googleapis';
 import { getDriveClient } from '@/lib/google/drive';
 
+export const maxDuration = 300; // 5 minutes max duration for this endpoint
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -126,6 +128,11 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'שגיאת הרשאות: יש להוסיף הרשאת gmail.send למסוף ה-Workspace (Domain-Wide Delegation).' }, { status: 403 });
         }
         throw new Error(`שגיאה בשליחת חלק ${i + 1} מתוך ${totalParts}`);
+      }
+
+      // Small delay between emails to avoid hitting rate limits
+      if (i < pdfFileIds.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
