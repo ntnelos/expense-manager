@@ -65,6 +65,7 @@ export default function SendToAccountantModal() {
       }
       
       setIsSuccess(true);
+      window.dispatchEvent(new Event('invoices-updated'));
       router.refresh();
     } catch (err: any) {
       console.error(err);
