@@ -177,7 +177,7 @@ export async function GET(req: Request) {
           const invoice = match.invoice;
           const isDuplicate = index > 0;
           
-          if (invoice) {
+          if (invoice && !invoice.sent_to_accountant) {
             uniqueInvoicesToMerge.set(invoice.id, invoice);
           }
 
