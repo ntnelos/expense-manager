@@ -261,6 +261,7 @@ export default function InvoiceGrid() {
 
   const handleTabChange = (tab: StatusTab) => {
     setActiveTab(tab);
+    setFilterStatus(''); // Reset status filter on tab change
     setPage(1);
   };
 
@@ -401,22 +402,32 @@ export default function InvoiceGrid() {
             </select>
 
             {/* Status Filter */}
-            <select
-              value={filterStatus}
-              onChange={(e) => {
-                setFilterStatus(e.target.value);
-                setPage(1);
-              }}
-              style={{ maxWidth: '150px' }}
-            >
-              <option value="">כל הסטטוסים</option>
-              <option value="new">חדש</option>
-              <option value="processing">בטיפול</option>
-              <option value="partially_matched">הותאם חלקי</option>
-              <option value="fully_matched">הותאם</option>
-              <option value="approved_no_expense">אושר ללא הוצאה</option>
-              <option value="error">שגיאה</option>
-            </select>
+            {activeTab !== 'error' && (
+              <select
+                value={filterStatus}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setPage(1);
+                }}
+                style={{ maxWidth: '150px' }}
+              >
+                <option value="">כל הסטטוסים</option>
+                {(activeTab === 'pending' || activeTab === 'all' || activeTab === 'sent') && (
+                  <>
+                    <option value="new">חדש</option>
+                    <option value="processing">בטיפול</option>
+                    <option value="partially_matched">הותאם חלקי</option>
+                  </>
+                )}
+                {(activeTab === 'matched' || activeTab === 'all' || activeTab === 'sent') && (
+                  <>
+                    <option value="fully_matched">הותאם</option>
+                    <option value="approved_no_expense">אושר ללא הוצאה</option>
+                  </>
+                )}
+                {(activeTab === 'all' || activeTab === 'sent') && <option value="error">שגיאה</option>}
+              </select>
+            )}
 
             {/* Reset Button */}
             {(search || dateFrom || dateTo || minAmount || maxAmount || categoryId || filterStatus) && (
@@ -429,6 +440,7 @@ export default function InvoiceGrid() {
                   setMinAmount('');
                   setMaxAmount('');
                   setCategoryId('');
+                  setFilterStatus('');
                   setPage(1);
                 }}
               >

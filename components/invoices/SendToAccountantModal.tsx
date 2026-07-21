@@ -125,8 +125,21 @@ export default function SendToAccountantModal() {
                     value={month} 
                     onChange={e => setMonth(e.target.value)} 
                     style={{ width: '100%', fontSize: 'var(--font-size-md)' }}
+                    disabled={isPreparing}
                   />
                 </div>
+                
+                {isPreparing && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', margin: 'var(--space-4) 0' }}>
+                    <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                    <div style={{ fontWeight: 600 }}>מכין קבצים... פעולה זו עשויה לקחת מספר דקות</div>
+                    <style>{`
+                      @keyframes spin {
+                        to { transform: rotate(360deg); }
+                      }
+                    `}</style>
+                  </div>
+                )}
               </div>
             )}
 

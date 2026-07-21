@@ -86,11 +86,10 @@ export async function GET(req: Request) {
     const nextYear = endMonth === 12 ? endYear + 1 : endYear;
     const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
 
-    // 1. Fetch matched expense lines
+    // 1. Fetch ALL expense lines for this month
     let query = supabase
       .from('expense_lines')
-      .select('*, matches(invoice:invoices(*, categories(name)))')
-      .in('status', ['approved', 'approved_no_invoice']);
+      .select('*, matches(invoice:invoices(*, categories(name)))');
       
     // Filter by charge_date (or transaction_date if null)
     query = query.or(`and(charge_date.gte.${startDate},charge_date.lt.${endDate}),and(charge_date.is.null,transaction_date.gte.${startDate},transaction_date.lt.${endDate})`);
@@ -242,14 +241,15 @@ export async function GET(req: Request) {
           { responseType: 'arraybuffer' }
         );
         const fileBuffer = Buffer.from(response.data as ArrayBuffer);
-        const isPDF = fileBuffer.length > 4 && fileBuffer.subarray(0, Math.min(1024, fileBuffer.length)).indexOf('%PDF') !== -1;
+        const headerText = fileBuffer.toString('ascii', 0, Math.min(1024, fileBuffer.length));
+        const isPDF = headerText.includes('%PDF');
         
         if (isPDF) {
           const donorPdf = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
           const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
           copiedPages.forEach(page => mergedPdf.addPage(page));
         } else {
-          // Compress image (assumes not PDF = image)
+          // It's an image. First try sharp to normalize and compress to JPG.
           try {
             const compressedImg = await sharp(fileBuffer)
               .resize({ width: 1200, withoutEnlargement: true })
@@ -262,6 +262,20 @@ export async function GET(req: Request) {
             page.drawImage(img, { x: 0, y: 0, width, height });
           } catch (sharpError) {
             console.error(`Failed to process image with sharp for file ${inv.drive_file_id}:`, sharpError);
+            // Fallback: try to embed directly if it's JPG or PNG
+            try {
+              let img;
+              if (inv.original_filename?.toLowerCase().endsWith('.png')) {
+                img = await mergedPdf.embedPng(fileBuffer);
+              } else {
+                img = await mergedPdf.embedJpg(fileBuffer); // default to JPG
+              }
+              const { width, height } = img.scale(1);
+              const page = mergedPdf.addPage([width, height]);
+              page.drawImage(img, { x: 0, y: 0, width, height });
+            } catch (fallbackError) {
+              console.error(`Fallback embed failed for file ${inv.drive_file_id}:`, fallbackError);
+            }
           }
         }
       } catch (e) {
