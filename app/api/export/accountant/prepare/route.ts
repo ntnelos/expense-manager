@@ -99,13 +99,13 @@ export async function GET(req: Request) {
     const { data: expenseLines, error: expError } = await query;
     if (expError) throw expError;
 
-    // 2. Fetch approved_no_expense invoices (which have no expense line)
+    // 2. Fetch ALL unsent invoices that are ready (fully_matched or approved_no_expense), regardless of date.
+    // This ensures no invoice is left behind in the "matched" tab.
     const { data: standaloneInvoices, error: invError } = await supabase
       .from('invoices')
       .select('*, categories(name)')
-      .eq('status', 'approved_no_expense')
-      .gte('invoice_date', startDate)
-      .lt('invoice_date', endDate);
+      .in('status', ['approved_no_expense', 'fully_matched'])
+      .not('sent_to_accountant', 'eq', true);
 
     if (invError) throw invError;
 
