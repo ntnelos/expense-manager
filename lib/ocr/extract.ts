@@ -214,3 +214,75 @@ function parseGeminiResponse(response: any): ExtractedInvoiceData {
     suggested_category: parsedData.suggested_category || null,
   };
 }
+
+export async function parseInvoiceCorrection(userText: string, currentData: {
+  supplier_name?: string | null;
+  total_amount?: number | null;
+  vat_amount?: number | null;
+  invoice_date?: string | null;
+  invoice_number?: string | null;
+  suggested_category?: string | null;
+}): Promise<{
+  supplier_name?: string | null;
+  total_amount?: number | null;
+  vat_amount?: number | null;
+  invoice_date?: string | null;
+  invoice_number?: string | null;
+  category_name?: string | null;
+}> {
+  const ai = getGeminiClient();
+  const prompt = `You are a helpful AI assistant for an Expense Management app.
+The user scanned an invoice, and then sent a follow-up text message to correct/update details of the scanned invoice.
+
+Current Invoice Details in Database:
+- Supplier Name: "${currentData.supplier_name || ''}"
+- Total Amount: ${currentData.total_amount ?? ''}
+- VAT Amount: ${currentData.vat_amount ?? ''}
+- Invoice Date: "${currentData.invoice_date || ''}"
+- Invoice Number: "${currentData.invoice_number || ''}"
+- Category: "${currentData.suggested_category || ''}"
+
+User's Text Message: "${userText}"
+
+Identify what field(s) the user wants to update or correct.
+Available fields to update:
+- supplier_name: (string or null if not mentioned)
+- total_amount: (number or null if not mentioned)
+- vat_amount: (number or null if not mentioned)
+- invoice_date: (string in YYYY-MM-DD format or null if not mentioned)
+- invoice_number: (string or null if not mentioned)
+- category_name: (string or null if not mentioned)
+
+Return ONLY a JSON object with this exact schema (no markdown, no backticks):
+{
+  "supplier_name": string or null,
+  "total_amount": number or null,
+  "vat_amount": number or null,
+  "invoice_date": string or null,
+  "invoice_number": string or null,
+  "category_name": string or null
+}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        safetySettings,
+      },
+    });
+
+    const content = response.text?.trim() || '{}';
+    let cleaned = content;
+    if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7);
+    if (cleaned.startsWith('```')) cleaned = cleaned.substring(3);
+    if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3);
+    cleaned = cleaned.trim();
+
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error('parseInvoiceCorrection error:', err);
+    return {};
+  }
+}

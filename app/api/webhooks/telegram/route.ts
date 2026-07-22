@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getFile, downloadFile, sendMessage } from '@/lib/telegram/bot';
-import { extractInvoiceFromImage, extractInvoiceFromPDF } from '@/lib/ocr/extract';
+import { extractInvoiceFromImage, extractInvoiceFromPDF, parseInvoiceCorrection } from '@/lib/ocr/extract';
 import { generateSHA256Hash } from '@/lib/utils/hash';
 import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 
@@ -61,6 +61,74 @@ export async function POST(req: Request) {
         await sendMessage(chatId, `⚠️ סוג הקובץ אינו נתמך. ניתן לשלוח רק תמונות או קבצי PDF.`);
         return NextResponse.json({ success: true });
       }
+    } else if (message.text) {
+      // Handle text correction / update for the last scanned invoice
+      const { data: lastInvoice } = await supabase
+        .from('invoices')
+        .select('id, supplier_name, total_amount, vat_amount, invoice_date, invoice_number, category_id, categories(id, name)')
+        .eq('source', 'telegram')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lastInvoice) {
+        await sendMessage(chatId, `אנא שלח תמונה או קובץ PDF של חשבונית.`);
+        return NextResponse.json({ success: true });
+      }
+
+      const updates = await parseInvoiceCorrection(message.text, {
+        supplier_name: lastInvoice.supplier_name,
+        total_amount: lastInvoice.total_amount,
+        vat_amount: lastInvoice.vat_amount,
+        invoice_date: lastInvoice.invoice_date,
+        invoice_number: lastInvoice.invoice_number,
+        suggested_category: (lastInvoice as any).categories?.name || null
+      });
+
+      const patchData: Record<string, any> = {};
+      if (updates.supplier_name !== undefined && updates.supplier_name !== null) patchData.supplier_name = updates.supplier_name;
+      if (updates.total_amount !== undefined && updates.total_amount !== null) patchData.total_amount = Number(updates.total_amount);
+      if (updates.vat_amount !== undefined && updates.vat_amount !== null) patchData.vat_amount = Number(updates.vat_amount);
+      if (updates.invoice_date !== undefined && updates.invoice_date !== null) patchData.invoice_date = updates.invoice_date;
+      if (updates.invoice_number !== undefined && updates.invoice_number !== null) patchData.invoice_number = updates.invoice_number;
+
+      if (updates.category_name) {
+        const { data: matchedCat } = await supabase
+          .from('categories')
+          .select('id')
+          .ilike('name', `%${updates.category_name}%`)
+          .maybeSingle();
+        if (matchedCat) {
+          patchData.category_id = matchedCat.id;
+        }
+      }
+
+      if (Object.keys(patchData).length === 0) {
+        await sendMessage(chatId, `אנא שלח תמונה או קובץ PDF של חשבונית.\n\nתוכל גם לתקן פרטים של החשבונית האחרונה שסרקת על ידי כתיבת הודעה כגון: "סכום 150", "ספק: שופרסל", "תאריך 15/06/2026".`);
+        return NextResponse.json({ success: true });
+      }
+
+      const { data: updatedInv, error: updateErr } = await supabase
+        .from('invoices')
+        .update(patchData)
+        .eq('id', lastInvoice.id)
+        .select('*, categories(name)')
+        .single();
+
+      if (updateErr) {
+        await sendMessage(chatId, `❌ שגיאה בעדכון החשבונית: ${updateErr.message}`);
+        return NextResponse.json({ success: true });
+      }
+
+      const updatedMsg = `✏️ החשבונית עודכנה בהצלחה!\n\n` +
+        `🏢 ספק: ${updatedInv.supplier_name || 'לא זוהה'}\n` +
+        `💰 סכום: ${updatedInv.total_amount ? '₪' + updatedInv.total_amount : 'לא זוהה'}\n` +
+        `📁 קטגוריה: ${updatedInv.categories?.name || 'לא זוהה'}\n` +
+        `📅 תאריך: ${updatedInv.invoice_date || 'לא זוהה'}\n\n` +
+        `החשבונית עודכנה במערכת!`;
+
+      await sendMessage(chatId, updatedMsg);
+      return NextResponse.json({ success: true });
     } else {
       await sendMessage(chatId, `אנא שלח תמונה או קובץ PDF של חשבונית.`);
       return NextResponse.json({ success: true });
