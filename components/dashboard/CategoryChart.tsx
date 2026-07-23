@@ -47,10 +47,11 @@ const CustomTooltip = ({ active, payload }: any) => {
           color: '#FFFFFF',
           padding: '10px 14px',
           borderRadius: '8px',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
           direction: 'rtl',
           border: '1px solid #334155',
           fontSize: '13px',
+          animation: 'fadeIn 0.15s ease-out',
         }}
       >
         <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', color: '#38BDF8' }}>
@@ -108,7 +109,7 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
               <span>🏷️</span> הוצאות לפי קטגוריית חשבוניות
             </h3>
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 'var(--space-1) 0 0 0' }}>
-              חלוקת סכומי ההוצאות והחשבוניות לפי סוגי הקטגוריות (לחץ על קטגוריה כדי לפתוח אקורדיון חשבוניות)
+              חלוקת סכומי ההוצאות והחשבוניות לפי סוגי הקטגוריות (לחץ על קטגוריה לצפייה בפירוט החשבוניות)
             </p>
           </div>
           <div className="badge badge-accent" style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, padding: '6px 12px' }}>
@@ -118,8 +119,8 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)', alignItems: 'start' }}>
           
-          {/* Pie Chart Section (Clean, no text overlap, hover tooltip only) */}
-          <div style={{ height: '340px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Pie Chart Section (Clean, no text overlap, instant hover tooltip with no top-left jump) */}
+          <div style={{ height: '340px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 'var(--space-4)' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -131,6 +132,7 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
                   paddingAngle={3}
                   dataKey="value"
                   label={false} // Disable slice text labels to prevent overlapping
+                  isAnimationActive={false} // Instant clean rendering
                 >
                   {data.map((entry, index) => (
                     <Cell
@@ -143,7 +145,8 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
                     />
                   ))}
                 </Pie>
-                <Tooltip content={<CustomTooltip />} />
+                {/* Disable position animation to prevent tooltip jumping from top-left */}
+                <Tooltip content={<CustomTooltip />} isAnimationActive={false} />
               </PieChart>
             </ResponsiveContainer>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '-15px' }}>
@@ -152,7 +155,7 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
           </div>
 
           {/* Left Side: Accordion Category List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', maxHeight: '450px', overflowY: 'auto', paddingLeft: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {data.map((cat, index) => {
               const isExpanded = expandedCategory === cat.name;
               const categoryColor = COLORS[index % COLORS.length];
@@ -165,7 +168,7 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
                     border: `1px solid ${isExpanded ? categoryColor : 'var(--color-border)'}`,
                     borderRadius: 'var(--radius-md)',
                     overflow: 'hidden',
-                    transition: 'all 0.2s ease',
+                    transition: 'border-color 0.2s ease',
                   }}
                 >
                   {/* Accordion Header */}
@@ -234,7 +237,7 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
                     </div>
                   </div>
 
-                  {/* Accordion Body — List of Invoices */}
+                  {/* Accordion Body — List of Invoices with internal scrolling */}
                   {isExpanded && (
                     <div
                       style={{
@@ -244,11 +247,20 @@ export default function CategoryChart({ data, loading }: CategoryChartProps) {
                       }}
                     >
                       <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
-                        📋 פירוט חשבוניות בקטגוריית {cat.name}:
+                        📋 פירוט {cat.count} חשבוניות בקטגוריית {cat.name}:
                       </div>
 
                       {cat.invoices && cat.invoices.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 'var(--space-2)',
+                            maxHeight: '260px', // Dedicated max height for the inner invoice list
+                            overflowY: 'auto', // Independent scrollbar inside the opened accordion
+                            paddingRight: '4px',
+                          }}
+                        >
                           {cat.invoices.map((inv: CategoryInvoice) => {
                             const statusInfo = translateInvoiceStatus(inv.status);
                             return (
