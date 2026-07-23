@@ -108,11 +108,21 @@ export type InvoiceSource = Invoice['source'];
 
 // ---- Dashboard Stats ----
 
+export interface CategoryInvoice {
+  id: string;
+  supplier_name: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  total_amount: number | null;
+  status: string;
+}
+
 export interface CategoryStat {
   name: string;
   value: number; // total sum in ILS
   count: number;
   percentage: number;
+  invoices?: CategoryInvoice[];
 }
 
 export interface ChargeDateStat {

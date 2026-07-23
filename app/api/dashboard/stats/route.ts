@@ -157,17 +157,37 @@ export async function GET(req: Request) {
     const notSentToAccountantCount = totalInvoices - sentToAccountantCount;
 
     // Metric C: Category breakdown for invoices
-    const catMap: Record<string, { name: string; value: number; count: number }> = {};
+    const catMap: Record<string, {
+      name: string;
+      value: number;
+      count: number;
+      invoices: Array<{
+        id: string;
+        supplier_name: string | null;
+        invoice_number: string | null;
+        invoice_date: string | null;
+        total_amount: number | null;
+        status: string;
+      }>;
+    }> = {};
     let totalCategorySum = 0;
 
     invoicesList.forEach(i => {
       const catName = i.categories?.name || (i.raw_ocr_data as any)?.suggested_category || 'ללא קטגוריה';
       const amt = Number(i.total_amount || 0);
       if (!catMap[catName]) {
-        catMap[catName] = { name: catName, value: 0, count: 0 };
+        catMap[catName] = { name: catName, value: 0, count: 0, invoices: [] };
       }
       catMap[catName].value += amt;
       catMap[catName].count += 1;
+      catMap[catName].invoices.push({
+        id: i.id,
+        supplier_name: i.supplier_name,
+        invoice_number: i.invoice_number,
+        invoice_date: i.invoice_date,
+        total_amount: i.total_amount,
+        status: i.status,
+      });
       totalCategorySum += amt;
     });
 
