@@ -108,6 +108,20 @@ export type InvoiceSource = Invoice['source'];
 
 // ---- Dashboard Stats ----
 
+export interface CategoryStat {
+  name: string;
+  value: number; // total sum in ILS
+  count: number;
+  percentage: number;
+}
+
+export interface ChargeDateStat {
+  charge_date: string;
+  total_amount: number;
+  total_lines: number;
+  matched_lines: number;
+}
+
 export interface DashboardStats {
   totalInvoices: number;
   unmatchedInvoices: number;
@@ -116,3 +130,38 @@ export interface DashboardStats {
   matchRate: number; // 0-100
   totalMatchedAmount: number;
 }
+
+export interface AdvancedDashboardStats {
+  // Metric A: Expense lines breakdown
+  totalExpenseLines: number;
+  matchedExpenseLines: number;
+  unapprovedExpenseLines: number;
+  expenseMatchRate: number; // 0-100%
+  totalExpenseAmount: number;
+
+  // Metric B: Invoices breakdown
+  totalInvoices: number;
+  matchedInvoices: number;
+  approvedNoExpenseInvoices: number;
+  pendingInvoices: number;
+  sentToAccountantCount: number;
+  notSentToAccountantCount: number;
+
+  // Metric C: Expenses by invoice category
+  categoriesData: CategoryStat[];
+
+  // Metric D: Total expense per bank charge date
+  chargeDatesData: ChargeDateStat[];
+
+  // Filter metadata
+  availableMonths: string[];
+  selectedPeriod: {
+    mode: 'month' | 'range' | 'year' | 'all';
+    month?: string;
+    fromMonth?: string;
+    toMonth?: string;
+    year?: string;
+    label: string;
+  };
+}
+
