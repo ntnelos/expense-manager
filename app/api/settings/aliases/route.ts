@@ -93,7 +93,7 @@ export async function DELETE(request: Request) {
 export async function PUT(request: Request) {
   try {
     const json = await request.json();
-    const { id, alias_name } = json;
+    const { id, original_name, alias_name } = json;
 
     if (!id || !alias_name) {
       return NextResponse.json({ error: 'Missing required fields (id, alias_name)' }, { status: 400 });
@@ -113,19 +113,21 @@ export async function PUT(request: Request) {
     }
 
     const oldAliasName = existingAlias.alias_name;
+    const updatePayload: any = { alias_name };
+    if (original_name) {
+      updatePayload.original_name = original_name;
+    }
 
     const { data, error } = await supabase
       .from('supplier_aliases')
-      .update({
-        alias_name,
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
 
-    // Retroactively update existing invoices that match the old alias name or original name
+    // Retroactively update existing invoices that match the old alias name
     if (oldAliasName !== alias_name) {
       await supabase
         .from('invoices')
@@ -138,4 +140,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 

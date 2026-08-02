@@ -7,65 +7,63 @@ export default function SupplierAliasManager() {
   const [aliases, setAliases] = useState<SupplierAlias[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Form states
-  const [showAddForm, setShowAddForm] = useState(false);
+  // New item state
   const [originalName, setOriginalName] = useState('');
   const [aliasName, setAliasName] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Inline editing states
+  // Edit & Delete state (matching CategoryManager)
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editOriginalName, setEditOriginalName] = useState('');
   const [editAliasName, setEditAliasName] = useState('');
-  const [savingEditId, setSavingEditId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchAliases();
-  }, []);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const fetchAliases = async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/settings/aliases');
-      if (!res.ok) throw new Error('נכשל בטעינת הכינויים');
+      if (!res.ok) throw new Error('טעינת כינויים נכשלה');
       const data = await res.json();
-      setAliases(data);
+      setAliases(data || []);
       setError(null);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'שגיאה בטעינת כינויים');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddAlias = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!originalName || !aliasName) return;
+  useEffect(() => {
+    fetchAliases();
+  }, []);
+
+  const handleAddAlias = async () => {
+    if (!originalName.trim() || !aliasName.trim()) return;
 
     try {
       setSaving(true);
       setError(null);
-      setSuccessMsg(null);
       const res = await fetch('/api/settings/aliases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ original_name: originalName, alias_name: aliasName }),
+        body: JSON.stringify({
+          original_name: originalName.trim(),
+          alias_name: aliasName.trim(),
+        }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'שגיאה בהוספת כינוי');
+        throw new Error(data.error || 'שגיאה בהוספת כינוי');
       }
 
-      const newAlias = await res.json();
-      setAliases([newAlias, ...aliases]);
+      setAliases((prev) => [data, ...prev]);
       setOriginalName('');
       setAliasName('');
-      setSuccessMsg('הכינוי נוסף בהצלחה!');
-      setShowAddForm(false);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'שגיאה בלתי צפויה');
     } finally {
       setSaving(false);
     }
@@ -73,252 +71,262 @@ export default function SupplierAliasManager() {
 
   const startEditing = (alias: SupplierAlias) => {
     setEditingId(alias.id);
+    setEditOriginalName(alias.original_name);
     setEditAliasName(alias.alias_name);
-    setError(null);
-    setSuccessMsg(null);
+    setDeleteConfirm(null);
   };
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditAliasName('');
-  };
-
-  const handleSaveEdit = async (id: string) => {
-    if (!editAliasName.trim()) return;
+  const handleSaveEdit = async () => {
+    if (!editingId || !editAliasName.trim() || !editOriginalName.trim()) return;
 
     try {
-      setSavingEditId(id);
+      setSaving(true);
       setError(null);
-      setSuccessMsg(null);
 
       const res = await fetch('/api/settings/aliases', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, alias_name: editAliasName.trim() }),
+        body: JSON.stringify({
+          id: editingId,
+          original_name: editOriginalName.trim(),
+          alias_name: editAliasName.trim(),
+        }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'שגיאה בעדכון הכינוי');
+        throw new Error(data.error || 'שגיאה בעדכון כינוי');
       }
 
-      const updated = await res.json();
-      setAliases(aliases.map((a) => (a.id === id ? { ...a, alias_name: updated.alias_name } : a)));
+      setAliases((prev) =>
+        prev.map((a) => (a.id === editingId ? data : a))
+      );
       setEditingId(null);
-      setEditAliasName('');
-      setSuccessMsg('הכינוי עודכן בהצלחה!');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'שגיאה בלתי צפויה');
     } finally {
-      setSavingEditId(null);
+      setSaving(false);
     }
   };
 
-  const handleDeleteAlias = async (id: string, originalName: string) => {
-    if (!confirm(`האם למחוק את הכינוי עבור "${originalName}"?`)) return;
-
+  const handleDelete = async (id: string) => {
     try {
       setError(null);
-      setSuccessMsg(null);
       const res = await fetch(`/api/settings/aliases?id=${id}`, {
         method: 'DELETE',
       });
 
-      if (!res.ok) throw new Error('שגיאה במחיקת הכינוי');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'שגיאה במחיקת כינוי');
+      }
 
-      setAliases(aliases.filter((a) => a.id !== id));
-      setSuccessMsg('הכינוי נמחק בהצלחה');
+      setAliases((prev) => prev.filter((a) => a.id !== id));
+      setDeleteConfirm(null);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'שגיאה בלתי צפויה');
     }
   };
 
-  if (loading) {
-    return <div className="bg-white rounded-lg shadow border border-gray-100 p-6 mb-8 text-center text-gray-500">טוען כינויים...</div>;
-  }
-
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-      {/* Header with prominent Add button */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">ניהול כינויים לספקים (Aliases)</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            הגדר והערוך שמות מומלצים לספקים כדי לאחד זיהויי חשבוניות תחת שם אחיד.
-          </p>
+    <div style={{ marginBottom: 'var(--space-8)' }}>
+      <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, marginBottom: 'var(--space-4)' }}>
+        🔄 ניהול כינויים לספקים (Aliases)
+      </h3>
+      <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)' }}>
+        הגדר שמות חלופיים לספקים כדי לאחד ולהמיר שמות זיהוי מקוריים לשם אחיד במערכת (למשל "דרך ארץ" ➔ "כביש 6").
+      </p>
+
+      {error && (
+        <div
+          style={{
+            background: 'var(--color-error-muted)',
+            border: '1px solid var(--color-error)',
+            color: 'var(--color-error)',
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--font-size-sm)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>⚠️ {error}</span>
+          <button onClick={() => setError(null)} style={{ color: 'var(--color-error)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
         </div>
+      )}
+
+      {/* Add Alias Form Bar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 'var(--space-3)',
+          alignItems: 'center',
+          marginBottom: 'var(--space-5)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <input
+          type="text"
+          value={originalName}
+          onChange={(e) => setOriginalName(e.target.value)}
+          placeholder="שם מקורי בחשבונית (למשל: דרך ארץ)..."
+          style={{ flex: 1, minWidth: '180px' }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAddAlias(); }}
+        />
+
+        <span style={{ color: 'var(--color-text-tertiary)', fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>➔</span>
+
+        <input
+          type="text"
+          value={aliasName}
+          onChange={(e) => setAliasName(e.target.value)}
+          placeholder="כינוי במערכת (למשל: כביש 6)..."
+          style={{ flex: 1, minWidth: '180px' }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAddAlias(); }}
+        />
 
         <button
-          onClick={() => {
-            setShowAddForm(!showAddForm);
-            setError(null);
-            setSuccessMsg(null);
-          }}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap"
+          className="btn btn-primary btn-sm"
+          onClick={handleAddAlias}
+          disabled={saving || !originalName.trim() || !aliasName.trim()}
+          style={{ whiteSpace: 'nowrap' }}
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{showAddForm ? 'סגור טופס' : 'הוסף כינוי חדש'}</span>
+          {saving ? 'שומר...' : '+ הוסף כינוי'}
         </button>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3.5 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold">&times;</button>
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="mb-4 p-3.5 bg-green-50 text-green-700 rounded-lg text-sm border border-green-200 flex items-center justify-between">
-          <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg(null)} className="text-green-500 hover:text-green-700 font-bold">&times;</button>
-        </div>
-      )}
-
-      {/* Prominent Add Form Container */}
-      {showAddForm && (
-        <div className="mb-6 p-5 bg-blue-50/60 border border-blue-200 rounded-xl shadow-inner">
-          <h3 className="text-md font-semibold text-blue-950 mb-3 flex items-center gap-2">
-            <span>✨</span> הוספת כינוי חדש לספק
-          </h3>
-          <form onSubmit={handleAddAlias} className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700 mb-1">שם מקורי בחשבונית (למשל: "דרך ארץ הייווייז")</label>
-              <input
-                type="text"
-                value={originalName}
-                onChange={(e) => setOriginalName(e.target.value)}
-                placeholder="הזן שם מקורי שנמצא בחשבונית..."
-                className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                required
-              />
-            </div>
-            <div className="hidden md:block text-gray-400 self-end pb-2 font-bold">➔</div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700 mb-1">כינוי מומר במערכת (למשל: "כביש 6")</label>
-              <input
-                type="text"
-                value={aliasName}
-                onChange={(e) => setAliasName(e.target.value)}
-                placeholder="הזן את השם המבוקש במערכת..."
-                className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                required
-              />
-            </div>
-            <div className="self-end mt-2 md:mt-0">
-              <button
-                type="submit"
-                disabled={saving || !originalName || !aliasName}
-                className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-semibold whitespace-nowrap shadow-sm"
-              >
-                {saving ? 'שומר...' : 'שמור כינוי'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Styled Structured Table */}
-      <div className="overflow-x-auto border border-gray-200 rounded-xl">
-        <table className="w-full text-right border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-              <th className="py-3.5 px-4">שם מקורי בחשבונית</th>
-              <th className="py-3.5 px-4">כינוי מומר במערכת</th>
-              <th className="py-3.5 px-4 text-center w-36">פעולות</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 bg-white text-sm">
-            {aliases.length === 0 ? (
+      {/* Aliases Table Container */}
+      <div className="data-table-container">
+        {loading ? (
+          <div style={{ padding: 'var(--space-6)' }}>
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="skeleton" style={{ height: '44px', marginBottom: 'var(--space-2)' }} />
+            ))}
+          </div>
+        ) : aliases.length === 0 ? (
+          <div className="empty-state" style={{ padding: 'var(--space-8)' }}>
+            <div className="empty-state-icon">🔄</div>
+            <div className="empty-state-title">אין כינויים מוגדרים</div>
+            <div className="empty-state-text">הוסף כינוי ראשון למעלה.</div>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
               <tr>
-                <td colSpan={3} className="text-center py-8 text-gray-500 bg-gray-50/50">
-                  לא הוגדרו כינויים לספקים. לחץ על <strong className="text-blue-600">"הוסף כינוי חדש"</strong> למעלה כדי להוסיף.
-                </td>
+                <th>שם מקורי בחשבונית</th>
+                <th>כינוי מבוקש במערכת</th>
+                <th style={{ textAlign: 'start' }}>פעולות</th>
               </tr>
-            ) : (
-              aliases.map((alias) => {
-                const isEditing = editingId === alias.id;
-                const isSavingThis = savingEditId === alias.id;
-
-                return (
-                  <tr key={alias.id} className="hover:bg-blue-50/30 transition-colors">
-                    {/* Original Name */}
-                    <td className="py-3.5 px-4 font-medium text-gray-900">
-                      {alias.original_name}
-                    </td>
-
-                    {/* Converted Alias Name (Editable) */}
-                    <td className="py-3.5 px-4">
-                      {isEditing ? (
-                        <div className="flex items-center gap-2 max-w-xs">
-                          <input
-                            type="text"
-                            value={editAliasName}
-                            onChange={(e) => setEditAliasName(e.target.value)}
-                            className="w-full px-3 py-1.5 border border-blue-400 rounded-md focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveEdit(alias.id);
-                              if (e.key === 'Escape') cancelEditing();
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-                          {alias.alias_name}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 text-center">
-                      {isEditing ? (
-                        <div className="flex items-center justify-center gap-2">
+            </thead>
+            <tbody>
+              {aliases.map((alias) => (
+                <tr key={alias.id}>
+                  {editingId === alias.id ? (
+                    <>
+                      <td>
+                        <input
+                          type="text"
+                          value={editOriginalName}
+                          onChange={(e) => setEditOriginalName(e.target.value)}
+                          className="input btn-sm"
+                          style={{ width: '100%' }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(); }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={editAliasName}
+                          onChange={(e) => setEditAliasName(e.target.value)}
+                          className="input btn-sm"
+                          style={{ width: '100%' }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(); }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'start' }}>
+                        <div style={{ display: 'flex', gap: '4px' }}>
                           <button
-                            onClick={() => handleSaveEdit(alias.id)}
-                            disabled={isSavingThis}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold disabled:opacity-50"
+                            className="btn btn-primary btn-sm"
+                            onClick={handleSaveEdit}
+                            disabled={saving}
                           >
-                            {isSavingThis ? 'שומר...' : 'שמור'}
+                            שמור
                           </button>
                           <button
-                            onClick={cancelEditing}
-                            className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-xs font-semibold"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setEditingId(null)}
+                            disabled={saving}
                           >
                             ביטול
                           </button>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => startEditing(alias)}
-                            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="ערוך כינוי"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteAlias(alias.id, alias.original_name)}
-                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            title="מחק כינוי"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ fontWeight: 600 }}>{alias.original_name}</td>
+                      <td>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: 'var(--space-1) var(--space-3)',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--color-accent-subtle)',
+                            color: 'var(--color-accent)',
+                            fontWeight: 600,
+                            fontSize: 'var(--font-size-xs)',
+                          }}
+                        >
+                          {alias.alias_name}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'start' }}>
+                        {deleteConfirm === alias.id ? (
+                          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' }}>למחוק?</span>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleDelete(alias.id)}
+                              style={{ color: 'var(--color-error)', fontWeight: 700 }}
+                            >
+                              כן
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setDeleteConfirm(null)}
+                            >
+                              לא
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => startEditing(alias)}
+                              title="ערוך כינוי"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => setDeleteConfirm(alias.id)}
+                              title="מחק כינוי"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
