@@ -89,3 +89,53 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const json = await request.json();
+    const { id, alias_name } = json;
+
+    if (!id || !alias_name) {
+      return NextResponse.json({ error: 'Missing required fields (id, alias_name)' }, { status: 400 });
+    }
+
+    const supabase = createServerClient();
+
+    // Fetch existing alias to get original_name and old alias_name
+    const { data: existingAlias, error: fetchError } = await supabase
+      .from('supplier_aliases')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingAlias) {
+      return NextResponse.json({ error: 'Alias not found' }, { status: 404 });
+    }
+
+    const oldAliasName = existingAlias.alias_name;
+
+    const { data, error } = await supabase
+      .from('supplier_aliases')
+      .update({
+        alias_name,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Retroactively update existing invoices that match the old alias name or original name
+    if (oldAliasName !== alias_name) {
+      await supabase
+        .from('invoices')
+        .update({ supplier_name: alias_name })
+        .eq('supplier_name', oldAliasName);
+    }
+
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+

@@ -67,7 +67,8 @@ export async function syncGmailInvoices() {
   console.log(`[Gmail Sync] Found ${messages.length} messages to inspect.`);
   
   let processedCount = 0;
-  let newestMessageDate = config.last_sync_at ? new Date(config.last_sync_at) : new Date('2026-06-01T00:00:00Z');
+  const scanStartTime = new Date();
+  let newestMessageDate = config.last_sync_at ? new Date(config.last_sync_at) : new Date('2026-06-10T00:00:00Z');
   
   for (const msgRef of messages) {
     try {
@@ -314,16 +315,18 @@ export async function syncGmailInvoices() {
     }
   }
   
-  // 4. Update sync settings (even if 0 processed, the date moves forward so we don't query old emails again)
-  if (messages.length > 0) {
-    await supabase
-      .from('gmail_sync_config')
-      .update({
-        last_sync_at: newestMessageDate.toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', config.id);
-  }
-    
-  return { success: true, count: processedCount, last_sync_at: newestMessageDate.toISOString() };
+  // 4. Update sync settings (Always update checkpoint so subsequent scans move forward)
+  const finalSyncDate = messages.length > 0 && newestMessageDate > (config.last_sync_at ? new Date(config.last_sync_at) : new Date(0))
+    ? newestMessageDate.toISOString()
+    : scanStartTime.toISOString();
+
+  await supabase
+    .from('gmail_sync_config')
+    .update({
+      last_sync_at: finalSyncDate,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', config.id);
+
+  return { success: true, count: processedCount, last_sync_at: finalSyncDate };
 }
