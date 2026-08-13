@@ -82,7 +82,7 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
       response = await gmail.users.messages.list({
         userId: 'me',
         q: query,
-        maxResults: 100 // Process up to 100 emails at a time to avoid timeout
+        maxResults: 100 // Process up to 100 emails at a time
       });
     } catch (err: any) {
       console.error('[Gmail Sync] Error fetching messages from Gmail API:', err);
@@ -91,15 +91,20 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
       return { success: false, message: msg };
     }
     
-    const messages = response.data.messages || [];
-    GmailSyncTracker.log('info', `נמצאו ${messages.length} הודעות מייל מתאימות לסריקה.`);
+    const rawMessages = response.data.messages || [];
     
-    if (messages.length === 0) {
+    if (rawMessages.length === 0) {
+      GmailSyncTracker.log('info', 'לא נמצאו הודעות חדשות מאז הסריקה האחרונה.');
       GmailSyncTracker.updateProgress(0, 0, 'לא נמצאו הודעות חדשות');
       await GmailSyncTracker.completeRun(0);
       return { success: true, count: 0, last_sync_at: config.last_sync_at };
     }
 
+    // Reverse messages to process in chronological order (OLDEST FIRST)
+    // This ensures checkpoint moves forward progressively!
+    const messages = [...rawMessages].reverse();
+
+    GmailSyncTracker.log('info', `נמצאו ${messages.length} הודעות מייל לסריקה (נסרקות בסדר כרונולוגי).`);
     GmailSyncTracker.updateProgress(0, messages.length, `מתחיל סריקה של ${messages.length} הודעות...`);
     
     let processedCount = 0;
@@ -218,7 +223,7 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
               .maybeSingle();
               
             if (existing) {
-              GmailSyncTracker.log('info', `[${msgIndexStr}] קובץ ${filename} כבר קיים במערכת - מדלג.`);
+              GmailSyncTracker.log('info', `[${msgIndexStr}] קובץ ${filename} כבר קיים במערכת (לפי תוכן זהה) - מדלג.`);
               continue;
             }
             
@@ -270,7 +275,7 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
                     skip = true;
                     break;
                   } else if ((ocrResult.document_type === 'tax_invoice' || ocrResult.document_type === 'tax_invoice_receipt') && dup.document_type === 'receipt') {
-                    GmailSyncTracker.log('info', `[${msgIndexStr}] משדרג קבלה קיימת ${dup.id} לחשבונית מס: ${filename}`);
+                    GmailSyncTracker.log('info', `[${msgIndexStr}] משדרג קבלה קיימת לחשבונית מס: ${filename}`);
                     updateExistingId = dup.id;
                     break;
                   } else if (ocrResult.document_type === dup.document_type) {
@@ -353,9 +358,17 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
           }
         }
         
-        // Update newest message date only if this message processed without crashing
+        // INCREMENTAL CHECKPOINT UPDATE:
+        // Update DB checkpoint after EACH processed message so progress is never lost or repeated!
         if (internalDate > newestMessageDate) {
           newestMessageDate = internalDate;
+          await supabase
+            .from('gmail_sync_config')
+            .update({
+              last_sync_at: newestMessageDate.toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', config.id);
         }
       } catch (msgErr: any) {
         console.error(`[Gmail Sync] Error processing message ${msgRef.id}:`, msgErr);
@@ -363,12 +376,10 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
       }
     }
     
-    // 4. Update sync settings checkpoint
+    // Final checkpoint update to the newest date or scan start time
     const finalSyncDate = messages.length > 0 && newestMessageDate > (config.last_sync_at ? new Date(config.last_sync_at) : new Date(0))
       ? newestMessageDate.toISOString()
       : scanStartTime.toISOString();
-
-    GmailSyncTracker.log('info', `מעדכן נקודת ביקורת (Checkpoint) ב-DB...`);
 
     await supabase
       .from('gmail_sync_config')

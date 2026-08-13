@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { syncGmailInvoices } from '@/lib/gmail/sync';
 import { GmailSyncTracker } from '@/lib/gmail/tracker';
 
+// Allow up to 60 seconds of execution in Vercel Serverless
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const active = GmailSyncTracker.getActiveRun();
@@ -15,28 +19,14 @@ export async function POST(request: Request) {
       });
     }
 
-    console.log('[API] Starting manual Gmail sync in background...');
+    console.log('[API] Starting manual Gmail sync...');
     
-    // Kick off the sync without blocking the HTTP request
-    // The tracker keeps state and persists to DB
-    syncGmailInvoices({ triggerType: 'manual' }).catch(err => {
-      console.error('[API] Uncaught error in background sync:', err);
-    });
+    // Await execution so the Serverless Function does not freeze mid-process
+    const result = await syncGmailInvoices({ triggerType: 'manual' });
 
-    // Give it a tiny fraction to initialize run state
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const currentRun = GmailSyncTracker.getActiveRun();
-
-    return NextResponse.json({
-      success: true,
-      started: true,
-      runId: currentRun?.id,
-      activeRun: currentRun,
-      message: 'הסריקה החלה בהצלחה'
-    });
+    return NextResponse.json(result);
   } catch (error: any) {
-    console.error('[API] Error initiating manual Gmail sync:', error);
+    console.error('[API] Error in manual Gmail sync:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

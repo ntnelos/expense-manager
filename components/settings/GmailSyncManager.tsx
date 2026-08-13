@@ -152,21 +152,34 @@ export default function GmailSyncManager() {
   };
 
   const handleManualSync = async () => {
+    setMessage('');
     try {
+      // Start polling immediately so progress updates appear instantly
+      fetchSyncStatus();
+
+      const pollTimer = setInterval(() => {
+        fetchSyncStatus();
+      }, 1000);
+
       const res = await fetch('/api/import/gmail/sync', { method: 'POST' });
       const data = await res.json();
       
+      clearInterval(pollTimer);
+      fetchSyncStatus();
+      fetchConfig();
+
       if (res.ok) {
-        if (data.activeRun) {
-          setActiveRun(data.activeRun);
+        if (data.alreadyRunning) {
+          setMessage('סריקה כבר מתבצעת כעת ברקע...');
+        } else {
+          setMessage(`הסריקה הסתיימה בהצלחה! נקלטו ${data.count ?? 0} חשבוניות חדשות.`);
         }
-        setMessage('הסריקה החלה ברקע. תוכל לעקוב אחר ההתקדמות בלוג הרץ מטה.');
-        // Trigger immediate polling
-        fetchSyncStatus();
       } else {
-        setMessage(`שגיאה בהפעלת סריקה: ${data.error}`);
+        setMessage(`שגיאה בסריקה: ${data.error || data.message}`);
       }
     } catch (err: any) {
+      fetchSyncStatus();
+      fetchConfig();
       setMessage(`שגיאה בסריקה: ${err.message}`);
     }
   };

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { syncGmailInvoices } from '@/lib/gmail/sync';
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   // Verify that the request is coming from Vercel Cron
   // or a developer authorized request.
