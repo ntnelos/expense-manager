@@ -10,7 +10,7 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader title="הגדרות" />
-      <div className="page-content" style={{ maxWidth: '800px' }}>
+      <div className="page-content max-w-[1200px] mx-auto">
         <GmailSyncManager />
         <SupplierAliasManager />
         <CategoryManager />

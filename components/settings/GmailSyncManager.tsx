@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { SyncRunState, SyncLogEntry } from '@/lib/gmail/tracker';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 
 interface SyncConfig {
   email_address: string;
@@ -17,14 +18,15 @@ export default function GmailSyncManager() {
   // Active run & logs
   const [activeRun, setActiveRun] = useState<SyncRunState | null>(null);
   const [recentRuns, setRecentRuns] = useState<SyncRunState[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [selectedHistoryRun, setSelectedHistoryRun] = useState<SyncRunState | null>(null);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   // Checkpoint editing
   const [isEditingCheckpoint, setIsEditingCheckpoint] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const [updatingCheckpoint, setUpdatingCheckpoint] = useState(false);
+
+  // Accordion state
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
 
   const logTerminalRef = useRef<HTMLDivElement>(null);
 
@@ -198,7 +200,7 @@ export default function GmailSyncManager() {
       });
 
       if (res.ok) {
-        setMessage(`תאריך סריקה אחרונה (Checkpoint) עודכן בהצלחה ב-DB ל-${new Date(isoDate).toLocaleDateString('he-IL')}.`);
+        setMessage(`תאריך חילוץ החשבוניות (Checkpoint) עודכן בהצלחה ב-DB ל-${new Date(isoDate).toLocaleDateString('he-IL')}.`);
         setIsEditingCheckpoint(false);
         fetchConfig();
       } else {
@@ -220,8 +222,16 @@ export default function GmailSyncManager() {
   };
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'לא בוצעה סריקה מעולם (יסרוק החל מ-10/06/2026)';
-    return new Date(dateStr).toLocaleString('he-IL');
+    if (!dateStr) return 'לא נבחר תאריך';
+    return new Date(dateStr).toLocaleDateString('he-IL');
+  };
+
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return 'מעולם לא';
+    return new Date(dateStr).toLocaleString('he-IL', { 
+      day: '2-digit', month: '2-digit', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit'
+    });
   };
 
   const isSyncing = activeRun?.status === 'running';
@@ -229,386 +239,351 @@ export default function GmailSyncManager() {
     ? Math.min(100, Math.round((activeRun.processed_messages / activeRun.total_messages) * 100))
     : (isSyncing ? 10 : 0);
 
+  // Find the actual last run to show to the user
+  const actualLastRun = recentRuns.length > 0 ? recentRuns[0] : null;
+
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 flex items-center gap-3">
-        <span className="inline-block w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-        <span className="text-gray-600 text-sm font-medium">טוען הגדרות Gmail...</span>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8 flex items-center justify-center gap-3 h-64">
+        <span className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
+        <span className="text-gray-600 font-medium text-lg">טוען הגדרות Gmail...</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-7 mb-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <span>סריקת חשבוניות מ-Gmail</span>
-            {config && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                מחובר
-              </span>
-            )}
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            סריקה אוטומטית ויזומה של חשבוניות ומסמכי הוצאה מתיבת המייל הארגונית
-          </p>
-        </div>
-
-        {config && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                fetchSyncStatus();
-                setShowHistory(!showHistory);
-              }}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium transition-colors flex items-center gap-1.5"
-            >
-              <span>📋</span>
-              <span>{showHistory ? 'הסתר היסטוריה' : 'היסטוריית סריקות'}</span>
-            </button>
-          </div>
-        )}
+    <div className="bg-white rounded-3xl shadow-sm border border-gray-200 mb-8 overflow-hidden">
+      {/* Minimal Header */}
+      <div className="bg-slate-50 border-b border-gray-200 p-6 sm:px-8">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+          <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </span>
+          סריקת חשבוניות מ-Gmail
+        </h2>
       </div>
 
-      {message && (
-        <div className={`p-3.5 mb-5 rounded-xl text-sm flex items-center justify-between transition-all ${
-          message.includes('שגיאה') 
-            ? 'bg-rose-50 text-rose-800 border border-rose-200' 
-            : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-        }`}>
-          <div className="flex items-center gap-2 font-medium">
-            <span>{message.includes('שגיאה') ? '⚠️' : '✅'}</span>
-            <span>{message}</span>
-          </div>
-          <button onClick={() => setMessage('')} className="font-bold text-base px-2 hover:opacity-75 transition-opacity">&times;</button>
-        </div>
-      )}
-
-      {!config ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-          <p className="mb-4 text-slate-700 text-sm leading-relaxed">
-            הזן את כתובת המייל הארגונית שממנה תרצה לייבא חשבוניות. 
-            המערכת משתמשת בהרשאות אדמין (Domain-Wide Delegation) עם חשבון שירות מאובטח, ולכן אין צורך בסיסמה או התחברות ידנית.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2.5 max-w-lg">
-            <input 
-              type="email" 
-              placeholder="fin@confettix.co.il" 
-              className="input flex-1 text-left direction-ltr border border-slate-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              value={inputEmail}
-              onChange={(e) => setInputEmail(e.target.value)}
-              dir="ltr"
-            />
-            <button 
-              onClick={handleConnect}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all hover:shadow hover:-translate-y-0.5 active:translate-y-0"
-            >
-              הגדר תיבה
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Account Details & Checkpoint Card */}
-          <div className="bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-slate-50 border border-blue-200/80 rounded-2xl p-5 shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-blue-100/80 pb-4 mb-4">
-              <div>
-                <span className="text-xs font-bold text-blue-900/70 uppercase tracking-wider block mb-0.5">כתובת תיבה מחוברת</span>
-                <span className="text-slate-900 font-extrabold text-lg tracking-tight font-mono">{config.email_address}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-blue-900 bg-white/90 shadow-2xs px-3.5 py-2 rounded-xl border border-blue-200 font-semibold flex items-center gap-2">
-                  <span className="text-blue-600 text-sm">⏰</span>
-                  <span>סריקה אוטומטית: מדי יום בשעה 03:00 לפנות בוקר</span>
-                </div>
-              </div>
+      <div className="p-6 sm:p-8">
+        {message && (
+          <div className={`p-4 mb-8 rounded-xl text-sm font-medium flex items-center justify-between transition-all ${
+            message.includes('שגיאה') 
+              ? 'bg-red-50 text-red-800 border border-red-200' 
+              : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">{message.includes('שגיאה') ? '⚠️' : '✅'}</span>
+              <span>{message}</span>
             </div>
+            <button onClick={() => setMessage('')} className="text-lg hover:opacity-75 p-1">&times;</button>
+          </div>
+        )}
+
+        {!config ? (
+          <div className="max-w-2xl mx-auto text-center py-8">
+            <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">חיבור תיבת מייל ארגונית</h3>
+            <p className="text-gray-500 mb-8 leading-relaxed max-w-lg mx-auto">
+              הזן את כתובת המייל הארגונית שממנה תרצה לייבא חשבוניות. המערכת תסרוק אוטומטית הודעות עם קבצי PDF ותמונות באמצעות הרשאות מאובטחות ברקע.
+            </p>
             
-            <div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+              <input 
+                type="email" 
+                placeholder="fin@yourcompany.com" 
+                className="input flex-1 text-left direction-ltr border-2 border-gray-200 rounded-xl px-4 py-3 text-base bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                value={inputEmail}
+                onChange={(e) => setInputEmail(e.target.value)}
+                dir="ltr"
+              />
+              <button 
+                onClick={handleConnect}
+                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all"
+              >
+                התחבר עכשיו
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            
+            {/* RIGHT COLUMN (Actions & Settings) */}
+            <div className="lg:col-span-7 flex flex-col gap-8">
+              
+              {/* Connected Email Header */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50/30 border border-blue-100 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
-                  <span className="text-xs font-bold text-blue-900/70 uppercase tracking-wider block mb-0.5">נקודת סריקה אחרונה (Checkpoint ב-DB)</span>
-                  <span className="text-slate-800 font-semibold text-sm">
-                    {formatDate(config.last_sync_at)}
-                  </span>
+                  <div className="text-sm font-semibold text-blue-600 mb-1 uppercase tracking-wide">כתובת תיבה מחוברת</div>
+                  <div className="text-2xl font-black text-gray-900 tracking-tight font-mono">{config.email_address}</div>
                 </div>
-                <button
-                  onClick={() => setIsEditingCheckpoint(!isEditingCheckpoint)}
-                  className="text-xs text-blue-700 hover:text-blue-900 font-semibold underline underline-offset-4 decoration-blue-300 hover:decoration-blue-700 transition-all self-start sm:self-auto"
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-blue-100">
+                  <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-bold text-gray-700">מחובר ופעיל</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={handleManualSync}
+                  disabled={isSyncing}
+                  className={`flex-1 relative overflow-hidden px-6 py-4 rounded-2xl font-black text-lg text-white shadow-xl transition-all duration-300 flex items-center justify-center gap-3 ${
+                    isSyncing 
+                      ? 'bg-blue-500 opacity-90 cursor-wait' 
+                      : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 hover:shadow-blue-500/30'
+                  }`}
                 >
-                  {isEditingCheckpoint ? 'ביטול עריכה' : '✏️ שנה תאריך סריקה'}
+                  {isSyncing ? (
+                    <>
+                      <span className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>סריקה מתבצעת ברקע...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>הפעל סריקה יזומה</span>
+                    </>
+                  )}
+                </button>
+
+                <button 
+                  onClick={handleDisconnect}
+                  disabled={isSyncing}
+                  className="px-6 py-4 bg-red-50 hover:bg-red-100 border-2 border-red-200 text-red-600 rounded-2xl font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>נתק תיבה</span>
                 </button>
               </div>
 
-              {isEditingCheckpoint && (
-                <div className="mt-3.5 pt-3.5 border-t border-blue-200/60 flex flex-wrap items-center gap-2.5">
-                  <span className="text-xs font-medium text-slate-700">קבע תאריך התחלה ל-DB:</span>
-                  <input
-                    type="date"
-                    value={customDate}
-                    onChange={(e) => setCustomDate(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => handleUpdateCheckpoint()}
-                    disabled={updatingCheckpoint}
-                    className="px-3.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-2xs transition-all disabled:opacity-50"
-                  >
-                    {updatingCheckpoint ? 'מעדכן...' : 'עדכן תאריך'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCustomDate('2026-06-10');
-                      handleUpdateCheckpoint('2026-06-10');
-                    }}
-                    disabled={updatingCheckpoint}
-                    className="px-3.5 py-1.5 bg-white text-blue-800 rounded-lg text-xs font-semibold hover:bg-blue-50 border border-blue-300 shadow-2xs transition-all disabled:opacity-50"
-                  >
-                    קבע ל-10/06/2026
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Prominent Action Button Area */}
-          <div className="flex flex-wrap items-center gap-4">
-            <button 
-              onClick={handleManualSync}
-              disabled={isSyncing}
-              className={`relative group overflow-hidden px-7 py-3.5 rounded-xl font-bold text-sm text-white shadow-md transition-all duration-200 flex items-center gap-3 select-none ${
-                isSyncing 
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 opacity-90 cursor-wait' 
-                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-700 hover:via-indigo-700 hover:to-emerald-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md'
-              }`}
-            >
-              {isSyncing ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  <span className="tracking-wide">סריקה מתבצעת ברקע...</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-base group-hover:rotate-180 transition-transform duration-500">⚡</span>
-                  <span className="tracking-wide">הפעל סריקה יזומה עכשיו</span>
-                </>
-              )}
-            </button>
-
-            <button 
-              onClick={handleDisconnect}
-              disabled={isSyncing}
-              className="px-4 py-3 border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 font-semibold text-xs rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              נתק תיבה
-            </button>
-          </div>
-
-          {/* Active Live Progress & Terminal Console */}
-          {activeRun && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-xl animate-in fade-in duration-300">
-              {/* Terminal Title Bar */}
-              <div className="bg-slate-900/90 px-4 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
-                    <span className="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
-                    <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+              {/* Settings Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Auto Scan Field */}
+                <div className="border border-gray-200 rounded-2xl p-5 hover:border-gray-300 transition-colors bg-white shadow-sm">
+                  <div className="flex items-center gap-2 text-gray-800 font-bold mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    סריקה אוטומטית
                   </div>
-                  <div className="h-4 w-[1px] bg-slate-700 mx-1"></div>
-                  <span className="text-xs font-mono font-semibold text-slate-300 flex items-center gap-2">
-                    {isSyncing && (
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                      </span>
-                    )}
-                    <span>יומן סריקה חי (Live Stream)</span>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <button
-                    onClick={() => copyLogsToClipboard(activeRun.logs || [])}
-                    className="text-2xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
-                  >
-                    {copiedLogs ? '✓ הועתק!' : '📋 העתק לוגים'}
-                  </button>
-                  <button
-                    onClick={() => setActiveRun(null)}
-                    className="text-2xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-                    title="סגור תצוגה"
-                  >
-                    ✕ סגור
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress Summary Strip */}
-              <div className="px-5 py-3.5 bg-slate-900/50 border-b border-slate-800/80 flex flex-col gap-2.5">
-                <div className="flex flex-wrap items-center justify-between text-xs gap-2">
-                  <div className="flex items-center gap-2 font-mono">
-                    <span className="text-slate-400">סטטוס:</span>
-                    <span className={`font-bold ${
-                      activeRun.status === 'running' 
-                        ? 'text-amber-400 animate-pulse' 
-                        : activeRun.status === 'completed' 
-                        ? 'text-emerald-400' 
-                        : 'text-rose-400'
-                    }`}>
-                      {activeRun.status === 'running' ? 'סורק ומעבד מיילים...' : activeRun.status === 'completed' ? 'סריקה הושלמה בהצלחה' : 'נכשל'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-slate-300 font-mono text-xs">
-                    {activeRun.total_messages > 0 && (
-                      <span>הודעות: <strong className="text-white">{activeRun.processed_messages}/{activeRun.total_messages}</strong></span>
-                    )}
-                    <span>נוספו: <strong className="text-emerald-400">+{activeRun.new_invoices_count}</strong></span>
-                    {activeRun.started_at && (
-                      <span className="text-slate-400 text-2xs">
-                        החלה ב: {new Date(activeRun.started_at).toLocaleTimeString('he-IL')}
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <span className="font-semibold text-gray-700 text-sm">מדי יום (03:00)</span>
+                    <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-md">פעיל</span>
                   </div>
                 </div>
 
-                {/* Progress Bar */}
-                {isSyncing && (
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${progressPercent}%` }}
-                    ></div>
-                  </div>
-                )}
-
-                {/* Current step text */}
-                <div className="text-2xs text-slate-400 font-mono truncate">
-                  ⚡ {activeRun.current_step || 'ממתין לפעולה...'}
-                </div>
-              </div>
-
-              {/* Terminal Logs Output */}
-              <div 
-                ref={logTerminalRef}
-                className="p-4 max-h-72 overflow-y-auto font-mono text-xs space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700 select-text"
-                dir="rtl"
-              >
-                {activeRun.logs && activeRun.logs.length > 0 ? (
-                  activeRun.logs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-2.5 leading-relaxed">
-                      <span className="text-slate-500 text-2xs whitespace-nowrap select-none font-sans pt-0.5">
-                        {new Date(log.timestamp).toLocaleTimeString('he-IL')}
-                      </span>
-                      
-                      <span className={`px-1.5 py-0.2 rounded text-2xs font-bold uppercase tracking-wider select-none shrink-0 ${
-                        log.level === 'success' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' :
-                        log.level === 'warn' ? 'bg-amber-950 text-amber-300 border border-amber-800/60' :
-                        log.level === 'error' ? 'bg-rose-950 text-rose-300 border border-rose-800/60' :
-                        'bg-blue-950 text-blue-300 border border-blue-800/60'
-                      }`}>
-                        {log.level === 'success' ? 'הצלחה' : log.level === 'warn' ? 'דילוג' : log.level === 'error' ? 'שגיאה' : 'מידע'}
-                      </span>
-
-                      <span className={`flex-1 break-words ${
-                        log.level === 'success' ? 'text-emerald-300 font-medium' :
-                        log.level === 'warn' ? 'text-amber-200/90' :
-                        log.level === 'error' ? 'text-rose-300 font-semibold' :
-                        'text-slate-200'
-                      }`}>
-                        {log.message}
-                      </span>
+                {/* Checkpoint Field */}
+                <div className="border border-gray-200 rounded-2xl p-5 hover:border-gray-300 transition-colors bg-white shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-gray-800 font-bold">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      נקודת התחלה
                     </div>
-                  ))
-                ) : (
-                  <div className="text-slate-500 italic">אין עדיין רשומות יומן להצגה...</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Sync History Drawer */}
-          {showHistory && (
-            <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/80 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <span>📜</span>
-                  <span>היסטוריית סריקות אחרונות</span>
-                </h3>
-                <span className="text-xs text-slate-500">5 סריקות אחרונות שנרשמו ב-DB</span>
-              </div>
-
-              {recentRuns.length === 0 ? (
-                <div className="text-xs text-slate-500 p-4 text-center bg-white rounded-xl border border-dashed border-slate-200">
-                  לא נמצאו סריקות קודמות מתועדות במערכת.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {recentRuns.map((run) => (
-                    <div 
-                      key={run.id}
-                      className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-300 transition-all shadow-2xs"
+                    <button
+                      onClick={() => setIsEditingCheckpoint(!isEditingCheckpoint)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                          run.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          run.status === 'failed' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                          'bg-amber-50 text-amber-700 border border-amber-200 animate-spin'
-                        }`}>
-                          {run.status === 'completed' ? '✓' : run.status === 'failed' ? '✗' : '↻'}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-900">
-                              {new Date(run.started_at).toLocaleString('he-IL')}
-                            </span>
-                            <span className="text-2xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                              {run.trigger_type === 'cron' ? '🤖 אוטומטי (Cron)' : '👤 יזום ידני'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                            {run.status === 'completed' 
-                              ? `נוספו ${run.new_invoices_count} חשבוניות חדשות (נסרקו ${run.total_messages} מיילים)` 
-                              : run.error_message || 'נכשל'}
-                          </p>
-                        </div>
-                      </div>
+                      {isEditingCheckpoint ? 'ביטול' : 'שנה תאריך'}
+                    </button>
+                  </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <button
-                          onClick={() => {
-                            setActiveRun(run);
-                            if (logTerminalRef.current) {
-                              logTerminalRef.current.scrollIntoView({ behavior: 'smooth' });
-                            }
-                          }}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors"
-                        >
-                          הצג לוג מלא
-                        </button>
-                      </div>
+                  {!isEditingCheckpoint ? (
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                      <div className="font-semibold text-gray-700 text-sm">{formatDate(config.last_sync_at)}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">המערכת תסרוק מיילים החל מתאריך זה</div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col gap-2">
+                      <input
+                        type="date"
+                        value={customDate}
+                        onChange={(e) => setCustomDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <button
+                        onClick={() => handleUpdateCheckpoint()}
+                        disabled={updatingCheckpoint}
+                        className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                      >
+                        {updatingCheckpoint ? 'שומר...' : 'שמור שינויים'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Live Progress & Terminal Console */}
+              {activeRun && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl animate-in fade-in duration-300 transform scale-100">
+                  <div className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-slate-300">Live Console</span>
+                    </div>
+                    <button onClick={() => setActiveRun(null)} className="text-slate-400 hover:text-white transition-colors">
+                      ✕
+                    </button>
+                  </div>
+                  
+                  <div className="p-4 bg-slate-900/50 border-b border-slate-800/80">
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="font-mono text-slate-300">
+                        סטטוס: <span className={activeRun.status === 'running' ? 'text-amber-400 font-bold' : activeRun.status === 'completed' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>{activeRun.status}</span>
+                      </span>
+                      <span className="font-mono text-slate-400">{activeRun.processed_messages}/{activeRun.total_messages}</span>
+                    </div>
+                    {isSyncing && (
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-500 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercent}%` }}></div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div ref={logTerminalRef} className="p-4 max-h-60 overflow-y-auto font-mono text-xs space-y-2" dir="rtl">
+                    {activeRun.logs && activeRun.logs.length > 0 ? (
+                      activeRun.logs.map((log) => (
+                        <div key={log.id} className="flex gap-2">
+                          <span className="text-slate-600 shrink-0">{new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
+                          <span className={`shrink-0 font-bold ${log.level === 'success' ? 'text-green-400' : log.level === 'warn' ? 'text-yellow-400' : log.level === 'error' ? 'text-red-400' : 'text-blue-400'}`}>[{log.level.toUpperCase()}]</span>
+                          <span className="text-slate-300">{log.message}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-slate-600 italic">ממתין לפעולות...</div>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Footer details */}
-          <div className="pt-2 text-xs text-slate-400 space-y-1">
-            <p>
-              💡 <strong>כיצד זה עובד?</strong> כל סריקה יזומה או אוטומטית שולפת מיילים עם קבצי PDF ותמונות שנוצרו אחרי תאריך ה-Checkpoint האחרון, מפענחת אותם ב-OCR ו-AI, מזהה ספקים וסכומים, מעלה את הקובץ ל-Google Drive, ויוצרת רשומת חשבונית במערכת.
-            </p>
-            <p>
-              ⚡ <strong>יציאה מהחלון:</strong> הסריקה מבוצעת לחלוטין ברקע בשרת. גם אם תעבור לעמוד אחר או תסגור את הדפדפן, הסריקה תמשיך לרוץ והתוצאות יתועדו במלואן.
-            </p>
+              {/* How it works Accordion */}
+              <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                <button 
+                  onClick={() => setIsHowItWorksOpen(!isHowItWorksOpen)}
+                  className="w-full flex items-center justify-between p-5 text-right hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="font-bold text-gray-900 text-base">כיצד הסריקה עובדת?</span>
+                  </div>
+                  {isHowItWorksOpen ? (
+                    <ChevronUpIcon className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <ChevronDownIcon className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+                
+                {isHowItWorksOpen && (
+                  <div className="p-5 pt-0 text-sm text-gray-600 leading-relaxed bg-white border-t border-gray-100">
+                    <ul className="space-y-3 mt-3">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-500 mt-0.5">•</span>
+                        <span><strong>זיהוי קבצים:</strong> המערכת מחפשת באופן אוטומטי מיילים המכילים חשבוניות, קבלות וקבצי PDF או תמונות.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-500 mt-0.5">•</span>
+                        <span><strong>פענוח חכם (AI):</strong> כל קובץ שנסרק מועבר למערכת OCR ובינה מלאכותית המזהה אוטומטית את הספק, התאריך והסכום.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-500 mt-0.5">•</span>
+                        <span><strong>סריקה ברקע:</strong> התהליך מתבצע במלואו בענן. גם אם תסגור את החלון או תכבה את המחשב, הסריקה תמשיך לרוץ והחשבוניות יעודכנו במערכת.</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* LEFT COLUMN (History Table) */}
+            <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-r border-gray-200 pt-8 lg:pt-0 lg:pr-10">
+              <div className="flex flex-col h-full">
+                <div className="mb-6 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    היסטוריית סריקות
+                  </h3>
+                  
+                  {actualLastRun && (
+                    <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                      סריקה אחרונה: {formatDateTime(actualLastRun.started_at)}
+                    </div>
+                  )}
+                </div>
+
+                {recentRuns.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-center">
+                    <div className="w-12 h-12 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-500">טרם בוצעו סריקות במערכת</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentRuns.map((run) => (
+                      <div 
+                        key={run.id}
+                        className={`p-4 rounded-2xl border ${run.status === 'completed' ? 'border-green-100 bg-green-50/30' : run.status === 'failed' ? 'border-red-100 bg-red-50/30' : 'border-blue-100 bg-blue-50/30'} flex flex-col gap-3 transition-colors hover:shadow-sm`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                                run.status === 'completed' ? 'bg-green-100 text-green-600' :
+                                run.status === 'failed' ? 'bg-red-100 text-red-600' :
+                                'bg-blue-100 text-blue-600 animate-pulse'
+                            }`}>
+                              {run.status === 'completed' ? '✓' : run.status === 'failed' ? '✗' : '↻'}
+                            </div>
+                            <div>
+                              <div className="font-bold text-gray-900 text-sm">{formatDateTime(run.started_at)}</div>
+                              <div className="text-xs font-semibold text-gray-500 mt-0.5">
+                                {run.trigger_type === 'cron' ? 'סריקה אוטומטית' : 'סריקה יזומה (ידני)'}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                            <div className="text-xs text-gray-500 font-medium mb-0.5">חשבוניות</div>
+                            <div className="font-bold text-gray-900 leading-none">+{run.new_invoices_count}</div>
+                          </div>
+                        </div>
+
+                        {run.status === 'failed' && run.error_message && (
+                          <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg mt-1 font-medium">
+                            שגיאה: {run.error_message}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
