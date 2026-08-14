@@ -6,6 +6,7 @@ import { SyncRunState, SyncLogEntry } from '@/lib/gmail/tracker';
 interface SyncConfig {
   email_address: string;
   last_sync_at: string | null;
+  auto_scan_day_of_month?: number;
 }
 
 export default function GmailSyncManager() {
@@ -19,10 +20,10 @@ export default function GmailSyncManager() {
   const [recentRuns, setRecentRuns] = useState<SyncRunState[]>([]);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
-  // Checkpoint editing
-  const [isEditingCheckpoint, setIsEditingCheckpoint] = useState(false);
-  const [customDate, setCustomDate] = useState('');
-  const [updatingCheckpoint, setUpdatingCheckpoint] = useState(false);
+  // Auto-scan settings
+  const [isEditingAutoScan, setIsEditingAutoScan] = useState(false);
+  const [autoScanDay, setAutoScanDay] = useState<number>(1);
+  const [updatingAutoScan, setUpdatingAutoScan] = useState(false);
 
   // Accordion state
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
@@ -65,12 +66,7 @@ export default function GmailSyncManager() {
         const { config: data } = await res.json();
         if (data) {
           setConfig(data);
-          if (data.last_sync_at) {
-            const d = new Date(data.last_sync_at);
-            setCustomDate(d.toISOString().slice(0, 10));
-          } else {
-            setCustomDate('2026-06-10');
-          }
+          setAutoScanDay(data.auto_scan_day_of_month || 1);
         } else {
           setConfig(null);
         }
@@ -90,7 +86,7 @@ export default function GmailSyncManager() {
       if (res.ok) {
         const data = await res.json();
         
-        // If an active run just finished, refresh config to display latest Checkpoint
+        // If an active run just finished, refresh config
         if (activeRun?.status === 'running' && data.activeRun?.status !== 'running') {
           fetchConfig();
         }
@@ -116,7 +112,7 @@ export default function GmailSyncManager() {
       const res = await fetch('/api/import/gmail/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email_address: inputEmail.trim() })
+        body: JSON.stringify({ email_address: inputEmail.trim(), auto_scan_day_of_month: 1 })
       });
       
       const data = await res.json();
@@ -184,31 +180,27 @@ export default function GmailSyncManager() {
     }
   };
 
-  const handleUpdateCheckpoint = async (newDateStr?: string) => {
-    const targetDateStr = newDateStr || customDate;
-    if (!targetDateStr) return;
-
-    setUpdatingCheckpoint(true);
+  const handleUpdateAutoScanDay = async () => {
+    setUpdatingAutoScan(true);
     try {
-      const isoDate = new Date(`${targetDateStr}T00:00:00Z`).toISOString();
       const res = await fetch('/api/import/gmail/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ last_sync_at: isoDate })
+        body: JSON.stringify({ auto_scan_day_of_month: autoScanDay })
       });
 
       if (res.ok) {
-        setMessage(`תאריך חילוץ החשבוניות עודכן בהצלחה ל-${new Date(isoDate).toLocaleDateString('he-IL')}.`);
-        setIsEditingCheckpoint(false);
+        setMessage(`יום סריקה אוטומטית עודכן ל-${autoScanDay} בחודש.`);
+        setIsEditingAutoScan(false);
         fetchConfig();
       } else {
         const err = await res.json();
-        setMessage(`שגיאה בעדכון תאריך: ${err.error}`);
+        setMessage(`שגיאה בעדכון יום סריקה: ${err.error}`);
       }
     } catch (err: any) {
       setMessage(`שגיאה בעדכון: ${err.message}`);
     } finally {
-      setUpdatingCheckpoint(false);
+      setUpdatingAutoScan(false);
     }
   };
 
@@ -217,11 +209,6 @@ export default function GmailSyncManager() {
     navigator.clipboard.writeText(text);
     setCopiedLogs(true);
     setTimeout(() => setCopiedLogs(false), 2000);
-  };
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'לא נבחר תאריך';
-    return new Date(dateStr).toLocaleDateString('he-IL');
   };
 
   const formatDateTime = (dateStr: string | null) => {
@@ -238,6 +225,9 @@ export default function GmailSyncManager() {
     : (isSyncing ? 10 : 0);
 
   const actualLastRun = recentRuns.length > 0 ? recentRuns[0] : null;
+
+  // The last scan date to show (prioritize history run, fallback to config.last_sync_at)
+  const lastScanDateToShow = actualLastRun ? actualLastRun.started_at : config?.last_sync_at;
 
   if (loading) {
     return (
@@ -283,24 +273,6 @@ export default function GmailSyncManager() {
             </p>
           </div>
         </div>
-
-        {config && (
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 12px',
-            background: 'var(--color-success-muted)',
-            border: '1px solid var(--color-success)',
-            borderRadius: 'var(--radius-full)',
-            fontSize: 'var(--font-size-xs)',
-            fontWeight: 700,
-            color: 'var(--color-success)'
-          }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
-            מחובר ופעיל
-          </div>
-        )}
       </div>
 
       <div style={{ padding: 'var(--space-6)' }}>
@@ -361,81 +333,57 @@ export default function GmailSyncManager() {
             {/* RIGHT COLUMN (Actions, Account, Settings) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
               
-              {/* Connected Email Header */}
+              {/* Connected Email Header with Disconnect Button */}
               <div style={{
                 background: 'var(--color-bg-tertiary)',
                 border: '1px solid var(--color-glass-border)',
                 borderRadius: 'var(--radius-xl)',
-                padding: 'var(--space-5)',
+                padding: 'var(--space-4) var(--space-5)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: 'var(--space-3)'
+                gap: 'var(--space-4)'
               }}>
                 <div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                    כתובת תיבה מחוברת
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '4px' }}>
+                    <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      כתובת תיבה מחוברת
+                    </div>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      background: 'var(--color-success-muted)',
+                      border: '1px solid var(--color-success)',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: 'var(--color-success)'
+                    }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
+                      פעיל
+                    </div>
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xl)', fontWeight: 800, color: 'var(--color-text-primary)', fontFamily: 'monospace', letterSpacing: '-0.02em' }}>
                     {config.email_address}
                   </div>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-                <button 
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  style={{
-                    flex: '1 1 200px',
-                    padding: 'var(--space-4) var(--space-6)',
-                    borderRadius: 'var(--radius-xl)',
-                    background: isSyncing ? '#3b82f6' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                    color: '#ffffff',
-                    fontWeight: 800,
-                    fontSize: 'var(--font-size-md)',
-                    border: 'none',
-                    cursor: isSyncing ? 'wait' : 'pointer',
-                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 'var(--space-2)',
-                    transition: 'all var(--transition-fast)'
-                  }}
-                >
-                  {isSyncing ? (
-                    <>
-                      <span style={{ fontSize: '1.2rem', display: 'inline-block', animation: 'spin 1s linear infinite' }}>↻</span>
-                      <span>סריקה מתבצעת ברקע...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: '1.2rem' }}>⚡</span>
-                      <span>הפעל סריקה יזומה</span>
-                    </>
-                  )}
-                </button>
 
                 <button 
                   onClick={handleDisconnect}
                   disabled={isSyncing}
+                  className="btn btn-danger"
                   style={{
-                    padding: 'var(--space-4) var(--space-5)',
-                    background: 'var(--color-error-muted)',
-                    border: '1px solid var(--color-error)',
-                    color: 'var(--color-error)',
-                    borderRadius: 'var(--radius-xl)',
-                    fontWeight: 700,
+                    padding: 'var(--space-2) var(--space-4)',
+                    borderRadius: 'var(--radius-md)',
+                    fontWeight: 600,
                     fontSize: 'var(--font-size-sm)',
-                    cursor: isSyncing ? 'not-allowed' : 'pointer',
                     opacity: isSyncing ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 'var(--space-2)',
-                    transition: 'all var(--transition-fast)'
+                    gap: '6px',
                   }}
                 >
                   <span>🔌</span>
@@ -443,7 +391,42 @@ export default function GmailSyncManager() {
                 </button>
               </div>
 
-              {/* Settings Fields (Auto-scan + Checkpoint) */}
+              {/* Action Buttons */}
+              <button 
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                style={{
+                  width: '100%',
+                  padding: 'var(--space-4) var(--space-6)',
+                  borderRadius: 'var(--radius-xl)',
+                  background: isSyncing ? '#3b82f6' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: 'var(--font-size-lg)',
+                  border: 'none',
+                  cursor: isSyncing ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--space-3)',
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                {isSyncing ? (
+                  <>
+                    <span style={{ fontSize: '1.4rem', display: 'inline-block', animation: 'spin 1s linear infinite' }}>↻</span>
+                    <span>סריקה מתבצעת ברקע...</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '1.4rem' }}>⚡</span>
+                    <span>הפעל סריקה יזומה</span>
+                  </>
+                )}
+              </button>
+
+              {/* Settings Fields (Auto-scan + Last Scan) */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
                 {/* Auto Scan Field */}
                 <div style={{
@@ -452,59 +435,70 @@ export default function GmailSyncManager() {
                   borderRadius: 'var(--radius-lg)',
                   padding: 'var(--space-4)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)' }}>
-                    <span>⏰</span>
-                    <span>סריקה אוטומטית</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      <span>⏰</span>
+                      <span>סריקה אוטומטית (חודשית)</span>
+                    </div>
+                    <button
+                      onClick={() => setIsEditingAutoScan(!isEditingAutoScan)}
+                      style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)', fontWeight: 700, textDecoration: 'underline' }}
+                    >
+                      {isEditingAutoScan ? 'ביטול' : 'שנה מועד'}
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
-                    <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>מדי יום (03:00)</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-success)', background: 'var(--color-success-muted)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>פעיל</span>
-                  </div>
+
+                  {!isEditingAutoScan ? (
+                    <div style={{ background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
+                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                        ב-{config.auto_scan_day_of_month || 1} לכל חודש (03:00)
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>יום בחודש:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={autoScanDay}
+                          onChange={(e) => setAutoScanDay(parseInt(e.target.value) || 1)}
+                          style={{ fontSize: 'var(--font-size-sm)', padding: 'var(--space-1) var(--space-2)', width: '60px', textAlign: 'center' }}
+                        />
+                      </div>
+                      <button
+                        onClick={handleUpdateAutoScanDay}
+                        disabled={updatingAutoScan}
+                        className="btn btn-primary btn-sm"
+                        style={{ width: '100%', fontWeight: 700 }}
+                      >
+                        {updatingAutoScan ? 'שומר...' : 'שמור שינויים'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Checkpoint Field */}
+                {/* Last Scan Date Field (Replaced Checkpoint) */}
                 <div style={{
                   background: 'var(--color-bg-secondary)',
                   border: '1px solid var(--color-glass-border)',
                   borderRadius: 'var(--radius-lg)',
                   padding: 'var(--space-4)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                      <span>📅</span>
-                      <span>נקודת התחלה</span>
-                    </div>
-                    <button
-                      onClick={() => setIsEditingCheckpoint(!isEditingCheckpoint)}
-                      style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)', fontWeight: 700, textDecoration: 'underline' }}
-                    >
-                      {isEditingCheckpoint ? 'ביטול' : 'שנה תאריך'}
-                    </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)' }}>
+                    <span>📅</span>
+                    <span>תאריך סריקה אחרונה</span>
                   </div>
-
-                  {!isEditingCheckpoint ? (
-                    <div style={{ background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
-                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>{formatDate(config.last_sync_at)}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: '2px' }}>ייבדקו מיילים החל מתאריך זה</div>
+                  
+                  <div style={{ background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
+                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      {formatDateTime(lastScanDateToShow)}
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                      <input
-                        type="date"
-                        value={customDate}
-                        onChange={(e) => setCustomDate(e.target.value)}
-                        style={{ fontSize: 'var(--font-size-xs)', padding: 'var(--space-2)', width: '100%' }}
-                      />
-                      <button
-                        onClick={() => handleUpdateCheckpoint()}
-                        disabled={updatingCheckpoint}
-                        className="btn btn-primary btn-sm"
-                        style={{ width: '100%', fontWeight: 700 }}
-                      >
-                        {updatingCheckpoint ? 'שומר...' : 'שמור שינויים'}
-                      </button>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: '2px' }}>
+                      הסריקה כוללת יזומה ואוטומטית
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 
@@ -660,12 +654,6 @@ export default function GmailSyncManager() {
                   <span>📜</span>
                   <span>היסטוריית סריקות</span>
                 </h3>
-                
-                {actualLastRun && (
-                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                    אחרונה: {formatDateTime(actualLastRun.started_at)}
-                  </div>
-                )}
               </div>
 
               {recentRuns.length === 0 ? (
@@ -678,7 +666,10 @@ export default function GmailSyncManager() {
                 }}>
                   <div style={{ fontSize: '2rem', marginBottom: 'var(--space-2)' }}>📋</div>
                   <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
-                    טרם בוצעו סריקות מתועדות
+                    טרם בוצעו סריקות במערכת
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
+                    לחץ על סריקה יזומה או המתן לסריקה האוטומטית הבאה. כאן יופיעו פרטי הסריקות, כמה חשבוניות נמצאו, וסטטוס ההצלחה.
                   </div>
                 </div>
               ) : (

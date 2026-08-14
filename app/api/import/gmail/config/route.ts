@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
-    const { email_address, last_sync_at } = await request.json();
+    const { email_address, last_sync_at, auto_scan_day_of_month } = await request.json();
     
     if (email_address && !email_address.includes('@')) {
       return NextResponse.json({ error: 'כתובת מייל לא תקינה' }, { status: 400 });
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       };
       if (email_address) updateData.email_address = email_address;
       if (last_sync_at !== undefined) updateData.last_sync_at = last_sync_at;
+      if (auto_scan_day_of_month !== undefined) updateData.auto_scan_day_of_month = auto_scan_day_of_month;
 
       await supabase
         .from('gmail_sync_config')
@@ -38,11 +39,12 @@ export async function POST(request: Request) {
         .from('gmail_sync_config')
         .insert({
           email_address: email_address,
-          last_sync_at: last_sync_at || new Date('2026-06-10T00:00:00Z').toISOString()
+          last_sync_at: last_sync_at || new Date('2026-06-10T00:00:00Z').toISOString(),
+          auto_scan_day_of_month: auto_scan_day_of_month || 1
         });
     }
     
-    return NextResponse.json({ success: true, email_address, last_sync_at });
+    return NextResponse.json({ success: true, email_address, last_sync_at, auto_scan_day_of_month });
   } catch (err: any) {
     console.error('Error in Gmail Config Route:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -51,10 +53,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { last_sync_at } = await request.json();
+    const { last_sync_at, auto_scan_day_of_month } = await request.json();
     
-    if (!last_sync_at) {
-      return NextResponse.json({ error: 'תאריך סריקה נדרש' }, { status: 400 });
+    if (last_sync_at === undefined && auto_scan_day_of_month === undefined) {
+      return NextResponse.json({ error: 'לא נשלחו נתונים לעדכון' }, { status: 400 });
     }
 
     const supabase = createServerClient();
@@ -67,17 +69,20 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'תצורת ג’ימייל לא נמצאה' }, { status: 404 });
     }
 
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    if (last_sync_at !== undefined) updateData.last_sync_at = new Date(last_sync_at).toISOString();
+    if (auto_scan_day_of_month !== undefined) updateData.auto_scan_day_of_month = auto_scan_day_of_month;
+
     await supabase
       .from('gmail_sync_config')
-      .update({
-        last_sync_at: new Date(last_sync_at).toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', existingConfig.id);
 
-    return NextResponse.json({ success: true, last_sync_at });
+    return NextResponse.json({ success: true, last_sync_at, auto_scan_day_of_month });
   } catch (err: any) {
-    console.error('Error updating last_sync_at:', err);
+    console.error('Error updating config:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
@@ -88,7 +93,7 @@ export async function GET() {
     
     const { data, error } = await supabase
       .from('gmail_sync_config')
-      .select('email_address, last_sync_at')
+      .select('email_address, last_sync_at, auto_scan_day_of_month')
       .maybeSingle();
       
     if (error) {
