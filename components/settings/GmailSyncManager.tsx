@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { SyncRunState, SyncLogEntry } from '@/lib/gmail/tracker';
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 
 interface SyncConfig {
   email_address: string;
@@ -485,9 +484,13 @@ export default function GmailSyncManager() {
                     <span className="font-bold text-gray-900 text-base">כיצד הסריקה עובדת?</span>
                   </div>
                   {isHowItWorksOpen ? (
-                    <ChevronUpIcon className="h-5 w-5 text-gray-400" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-gray-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                    </svg>
                   ) : (
-                    <ChevronDownIcon className="h-5 w-5 text-gray-400" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-gray-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
                   )}
                 </button>
                 
