@@ -211,7 +211,7 @@ export default function GmailSyncManager() {
     setTimeout(() => setCopiedLogs(false), 2000);
   };
 
-  const formatDateTime = (dateStr: string | null) => {
+  const formatDateTime = (dateStr: string | null | undefined) => {
     if (!dateStr) return 'מעולם לא';
     return new Date(dateStr).toLocaleString('he-IL', { 
       day: '2-digit', month: '2-digit', year: 'numeric', 
