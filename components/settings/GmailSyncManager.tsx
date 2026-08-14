@@ -116,7 +116,7 @@ export default function GmailSyncManager() {
       const res = await fetch('/api/import/gmail/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email_address: inputEmail })
+        body: JSON.stringify({ email_address: inputEmail.trim() })
       });
       
       const data = await res.json();
@@ -155,7 +155,6 @@ export default function GmailSyncManager() {
   const handleManualSync = async () => {
     setMessage('');
     try {
-      // Start polling immediately so progress updates appear instantly
       fetchSyncStatus();
 
       const pollTimer = setInterval(() => {
@@ -199,7 +198,7 @@ export default function GmailSyncManager() {
       });
 
       if (res.ok) {
-        setMessage(`תאריך חילוץ החשבוניות (Checkpoint) עודכן בהצלחה ב-DB ל-${new Date(isoDate).toLocaleDateString('he-IL')}.`);
+        setMessage(`תאריך חילוץ החשבוניות עודכן בהצלחה ל-${new Date(isoDate).toLocaleDateString('he-IL')}.`);
         setIsEditingCheckpoint(false);
         fetchConfig();
       } else {
@@ -238,115 +237,183 @@ export default function GmailSyncManager() {
     ? Math.min(100, Math.round((activeRun.processed_messages / activeRun.total_messages) * 100))
     : (isSyncing ? 10 : 0);
 
-  // Find the actual last run to show to the user
   const actualLastRun = recentRuns.length > 0 ? recentRuns[0] : null;
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8 flex items-center justify-center gap-3 h-64">
-        <span className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-        <span className="text-gray-600 font-medium text-lg">טוען הגדרות Gmail...</span>
+      <div className="card" style={{ padding: 'var(--space-8)', marginBottom: 'var(--space-8)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)' }}>
+        <span style={{ fontSize: '1.5rem' }}>⏳</span>
+        <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>טוען הגדרות Gmail...</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-gray-200 mb-8 overflow-hidden">
-      {/* Minimal Header */}
-      <div className="bg-slate-50 border-b border-gray-200 p-6 sm:px-8">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-          <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </span>
-          סריקת חשבוניות מ-Gmail
-        </h2>
+    <div className="card" style={{ marginBottom: 'var(--space-8)', overflow: 'hidden', padding: 0 }}>
+      {/* Header */}
+      <div style={{
+        padding: 'var(--space-5) var(--space-6)',
+        borderBottom: '1px solid var(--color-glass-border)',
+        background: 'var(--color-bg-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 'var(--space-3)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--color-accent-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.4rem'
+          }}>
+            📬
+          </div>
+          <div>
+            <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, margin: 0, color: 'var(--color-text-primary)' }}>
+              סריקת חשבוניות מ-Gmail
+            </h2>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', margin: '2px 0 0 0' }}>
+              ייבוא וסריקה אוטומטית ויזומה של חשבוניות ומסמכי הוצאה מתיבת המייל
+            </p>
+          </div>
+        </div>
+
+        {config && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 12px',
+            background: 'var(--color-success-muted)',
+            border: '1px solid var(--color-success)',
+            borderRadius: 'var(--radius-full)',
+            fontSize: 'var(--font-size-xs)',
+            fontWeight: 700,
+            color: 'var(--color-success)'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }}></span>
+            מחובר ופעיל
+          </div>
+        )}
       </div>
 
-      <div className="p-6 sm:p-8">
+      <div style={{ padding: 'var(--space-6)' }}>
         {message && (
-          <div className={`p-4 mb-8 rounded-xl text-sm font-medium flex items-center justify-between transition-all ${
-            message.includes('שגיאה') 
-              ? 'bg-red-50 text-red-800 border border-red-200' 
-              : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-          }`}>
-            <div className="flex items-center gap-3">
-              <span className="text-xl">{message.includes('שגיאה') ? '⚠️' : '✅'}</span>
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            marginBottom: 'var(--space-6)',
+            borderRadius: 'var(--radius-lg)',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: message.includes('שגיאה') ? 'var(--color-error-muted)' : 'var(--color-success-muted)',
+            border: `1px solid ${message.includes('שגיאה') ? 'var(--color-error)' : 'var(--color-success)'}`,
+            color: message.includes('שגיאה') ? 'var(--color-error)' : 'var(--color-success)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span>{message.includes('שגיאה') ? '⚠️' : '✅'}</span>
               <span>{message}</span>
             </div>
-            <button onClick={() => setMessage('')} className="text-lg hover:opacity-75 p-1">&times;</button>
+            <button onClick={() => setMessage('')} style={{ fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', padding: '0 var(--space-2)' }}>✕</button>
           </div>
         )}
 
         {!config ? (
-          <div className="max-w-2xl mx-auto text-center py-8">
-            <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">חיבור תיבת מייל ארגונית</h3>
-            <p className="text-gray-500 mb-8 leading-relaxed max-w-lg mx-auto">
+          <div style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center', padding: 'var(--space-6) 0' }}>
+            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>🔒</div>
+            <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, marginBottom: 'var(--space-2)' }}>חיבור תיבת מייל ארגונית</h3>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.6, marginBottom: 'var(--space-6)' }}>
               הזן את כתובת המייל הארגונית שממנה תרצה לייבא חשבוניות. המערכת תסרוק אוטומטית הודעות עם קבצי PDF ותמונות באמצעות הרשאות מאובטחות ברקע.
             </p>
-            
-            <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', flexWrap: 'wrap' }}>
               <input 
                 type="email" 
                 placeholder="fin@yourcompany.com" 
-                className="input flex-1 text-left direction-ltr border-2 border-gray-200 rounded-xl px-4 py-3 text-base bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none"
+                style={{ flex: 1, minWidth: '240px', maxWidth: '350px', direction: 'ltr', textAlign: 'left' }}
                 value={inputEmail}
                 onChange={(e) => setInputEmail(e.target.value)}
-                dir="ltr"
               />
               <button 
                 onClick={handleConnect}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition-all"
+                className="btn btn-primary"
+                style={{ padding: 'var(--space-3) var(--space-6)', fontWeight: 700 }}
               >
                 התחבר עכשיו
               </button>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: 'var(--space-8)',
+            alignItems: 'start'
+          }}>
             
-            {/* RIGHT COLUMN (Actions & Settings) */}
-            <div className="lg:col-span-7 flex flex-col gap-8">
+            {/* RIGHT COLUMN (Actions, Account, Settings) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
               
               {/* Connected Email Header */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50/30 border border-blue-100 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div style={{
+                background: 'var(--color-bg-tertiary)',
+                border: '1px solid var(--color-glass-border)',
+                borderRadius: 'var(--radius-xl)',
+                padding: 'var(--space-5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 'var(--space-3)'
+              }}>
                 <div>
-                  <div className="text-sm font-semibold text-blue-600 mb-1 uppercase tracking-wide">כתובת תיבה מחוברת</div>
-                  <div className="text-2xl font-black text-gray-900 tracking-tight font-mono">{config.email_address}</div>
-                </div>
-                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-blue-100">
-                  <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-bold text-gray-700">מחובר ופעיל</span>
+                  <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                    כתובת תיבה מחוברת
+                  </div>
+                  <div style={{ fontSize: 'var(--font-size-xl)', fontWeight: 800, color: 'var(--color-text-primary)', fontFamily: 'monospace', letterSpacing: '-0.02em' }}>
+                    {config.email_address}
+                  </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
                 <button 
                   onClick={handleManualSync}
                   disabled={isSyncing}
-                  className={`flex-1 relative overflow-hidden px-6 py-4 rounded-2xl font-black text-lg text-white shadow-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                    isSyncing 
-                      ? 'bg-blue-500 opacity-90 cursor-wait' 
-                      : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 hover:shadow-blue-500/30'
-                  }`}
+                  style={{
+                    flex: '1 1 200px',
+                    padding: 'var(--space-4) var(--space-6)',
+                    borderRadius: 'var(--radius-xl)',
+                    background: isSyncing ? '#3b82f6' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: 'var(--font-size-md)',
+                    border: 'none',
+                    cursor: isSyncing ? 'wait' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 'var(--space-2)',
+                    transition: 'all var(--transition-fast)'
+                  }}
                 >
                   {isSyncing ? (
                     <>
-                      <span className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span style={{ fontSize: '1.2rem', display: 'inline-block', animation: 'spin 1s linear infinite' }}>↻</span>
                       <span>סריקה מתבצעת ברקע...</span>
                     </>
                   ) : (
                     <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
+                      <span style={{ fontSize: '1.2rem' }}>⚡</span>
                       <span>הפעל סריקה יזומה</span>
                     </>
                   )}
@@ -355,65 +422,84 @@ export default function GmailSyncManager() {
                 <button 
                   onClick={handleDisconnect}
                   disabled={isSyncing}
-                  className="px-6 py-4 bg-red-50 hover:bg-red-100 border-2 border-red-200 text-red-600 rounded-2xl font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  style={{
+                    padding: 'var(--space-4) var(--space-5)',
+                    background: 'var(--color-error-muted)',
+                    border: '1px solid var(--color-error)',
+                    color: 'var(--color-error)',
+                    borderRadius: 'var(--radius-xl)',
+                    fontWeight: 700,
+                    fontSize: 'var(--font-size-sm)',
+                    cursor: isSyncing ? 'not-allowed' : 'pointer',
+                    opacity: isSyncing ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    transition: 'all var(--transition-fast)'
+                  }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
+                  <span>🔌</span>
                   <span>נתק תיבה</span>
                 </button>
               </div>
 
-              {/* Settings Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Settings Fields (Auto-scan + Checkpoint) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
                 {/* Auto Scan Field */}
-                <div className="border border-gray-200 rounded-2xl p-5 hover:border-gray-300 transition-colors bg-white shadow-sm">
-                  <div className="flex items-center gap-2 text-gray-800 font-bold mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    סריקה אוטומטית
+                <div style={{
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-glass-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 'var(--space-4)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)' }}>
+                    <span>⏰</span>
+                    <span>סריקה אוטומטית</span>
                   </div>
-                  <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    <span className="font-semibold text-gray-700 text-sm">מדי יום (03:00)</span>
-                    <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-md">פעיל</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
+                    <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>מדי יום (03:00)</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-success)', background: 'var(--color-success-muted)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>פעיל</span>
                   </div>
                 </div>
 
                 {/* Checkpoint Field */}
-                <div className="border border-gray-200 rounded-2xl p-5 hover:border-gray-300 transition-colors bg-white shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 text-gray-800 font-bold">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      נקודת התחלה
+                <div style={{
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-glass-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 'var(--space-4)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      <span>📅</span>
+                      <span>נקודת התחלה</span>
                     </div>
                     <button
                       onClick={() => setIsEditingCheckpoint(!isEditingCheckpoint)}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                      style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)', fontWeight: 700, textDecoration: 'underline' }}
                     >
                       {isEditingCheckpoint ? 'ביטול' : 'שנה תאריך'}
                     </button>
                   </div>
 
                   {!isEditingCheckpoint ? (
-                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                      <div className="font-semibold text-gray-700 text-sm">{formatDate(config.last_sync_at)}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">המערכת תסרוק מיילים החל מתאריך זה</div>
+                    <div style={{ background: 'var(--color-bg-primary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-glass-border)' }}>
+                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>{formatDate(config.last_sync_at)}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', marginTop: '2px' }}>ייבדקו מיילים החל מתאריך זה</div>
                     </div>
                   ) : (
-                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col gap-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                       <input
                         type="date"
                         value={customDate}
                         onChange={(e) => setCustomDate(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                        style={{ fontSize: 'var(--font-size-xs)', padding: 'var(--space-2)', width: '100%' }}
                       />
                       <button
                         onClick={() => handleUpdateCheckpoint()}
                         disabled={updatingCheckpoint}
-                        className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                        className="btn btn-primary btn-sm"
+                        style={{ width: '100%', fontWeight: 700 }}
                       >
                         {updatingCheckpoint ? 'שומר...' : 'שמור שינויים'}
                       </button>
@@ -422,93 +508,139 @@ export default function GmailSyncManager() {
                 </div>
               </div>
 
-              {/* Active Live Progress & Terminal Console */}
+              {/* Active Terminal / Live Stream */}
               {activeRun && (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl animate-in fade-in duration-300 transform scale-100">
-                  <div className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div className="flex gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-slate-300">Live Console</span>
-                    </div>
-                    <button onClick={() => setActiveRun(null)} className="text-slate-400 hover:text-white transition-colors">
-                      ✕
-                    </button>
-                  </div>
-                  
-                  <div className="p-4 bg-slate-900/50 border-b border-slate-800/80">
-                    <div className="flex justify-between text-xs mb-2">
-                      <span className="font-mono text-slate-300">
-                        סטטוס: <span className={activeRun.status === 'running' ? 'text-amber-400 font-bold' : activeRun.status === 'completed' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>{activeRun.status}</span>
+                <div style={{
+                  background: '#090d16',
+                  borderRadius: 'var(--radius-xl)',
+                  border: '1px solid #1e293b',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--shadow-xl)'
+                }}>
+                  <div style={{
+                    background: '#0f172a',
+                    padding: 'var(--space-3) var(--space-4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderBottom: '1px solid #1e293b'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }}></span>
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
+                      <span style={{ color: '#cbd5e1', fontSize: 'var(--font-size-xs)', fontFamily: 'monospace', fontWeight: 700, marginRight: 'var(--space-2)' }}>
+                        יומן סריקה חי (Live Stream)
                       </span>
-                      <span className="font-mono text-slate-400">{activeRun.processed_messages}/{activeRun.total_messages}</span>
                     </div>
-                    {isSyncing && (
-                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-blue-500 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercent}%` }}></div>
-                      </div>
-                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <button
+                        onClick={() => copyLogsToClipboard(activeRun.logs || [])}
+                        style={{ color: '#94a3b8', fontSize: '0.7rem', padding: '2px 8px', background: '#1e293b', borderRadius: 'var(--radius-sm)' }}
+                      >
+                        {copiedLogs ? '✓ הועתק!' : '📋 העתק'}
+                      </button>
+                      <button
+                        onClick={() => setActiveRun(null)}
+                        style={{ color: '#94a3b8', fontSize: '0.8rem', padding: '2px 6px', background: '#1e293b', borderRadius: 'var(--radius-sm)' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
 
-                  <div ref={logTerminalRef} className="p-4 max-h-60 overflow-y-auto font-mono text-xs space-y-2" dir="rtl">
+                  <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'rgba(15, 23, 42, 0.6)', borderBottom: '1px solid #1e293b', fontSize: 'var(--font-size-xs)', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>
+                      סטטוס: <strong style={{ color: activeRun.status === 'running' ? '#fbbf24' : activeRun.status === 'completed' ? '#4ade80' : '#f87171' }}>{activeRun.status}</strong>
+                    </span>
+                    <span>הודעות: <strong style={{ color: '#ffffff' }}>{activeRun.processed_messages}/{activeRun.total_messages}</strong></span>
+                  </div>
+
+                  {isSyncing && (
+                    <div style={{ width: '100%', height: '4px', background: '#1e293b' }}>
+                      <div style={{ width: `${progressPercent}%`, height: '100%', background: '#3b82f6', transition: 'width 0.3s ease' }}></div>
+                    </div>
+                  )}
+
+                  <div 
+                    ref={logTerminalRef}
+                    style={{
+                      padding: 'var(--space-4)',
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      fontFamily: 'monospace',
+                      fontSize: '0.75rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      color: '#e2e8f0',
+                      direction: 'rtl'
+                    }}
+                  >
                     {activeRun.logs && activeRun.logs.length > 0 ? (
                       activeRun.logs.map((log) => (
-                        <div key={log.id} className="flex gap-2">
-                          <span className="text-slate-600 shrink-0">{new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
-                          <span className={`shrink-0 font-bold ${log.level === 'success' ? 'text-green-400' : log.level === 'warn' ? 'text-yellow-400' : log.level === 'error' ? 'text-red-400' : 'text-blue-400'}`}>[{log.level.toUpperCase()}]</span>
-                          <span className="text-slate-300">{log.message}</span>
+                        <div key={log.id} style={{ display: 'flex', gap: 'var(--space-2)', lineHeight: 1.4 }}>
+                          <span style={{ color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
+                          <span style={{
+                            fontWeight: 700,
+                            color: log.level === 'success' ? '#4ade80' : log.level === 'warn' ? '#fbbf24' : log.level === 'error' ? '#f87171' : '#60a5fa'
+                          }}>
+                            [{log.level.toUpperCase()}]
+                          </span>
+                          <span>{log.message}</span>
                         </div>
                       ))
                     ) : (
-                      <div className="text-slate-600 italic">ממתין לפעולות...</div>
+                      <div style={{ color: '#64748b', fontStyle: 'italic' }}>ממתין לפעולות...</div>
                     )}
                   </div>
                 </div>
               )}
 
               {/* How it works Accordion */}
-              <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+              <div style={{
+                background: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-glass-border)',
+                borderRadius: 'var(--radius-lg)',
+                overflow: 'hidden'
+              }}>
                 <button 
                   onClick={() => setIsHowItWorksOpen(!isHowItWorksOpen)}
-                  className="w-full flex items-center justify-between p-5 text-right hover:bg-gray-50 transition-colors"
+                  style={{
+                    width: '100%',
+                    padding: 'var(--space-4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    textAlign: 'right',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-primary)'
+                  }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span className="font-bold text-gray-900 text-base">כיצד הסריקה עובדת?</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span>💡</span>
+                    <span>כיצד הסריקה עובדת?</span>
                   </div>
-                  {isHowItWorksOpen ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-gray-400">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-gray-400">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  )}
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    {isHowItWorksOpen ? '▲' : '▼'}
+                  </span>
                 </button>
                 
                 {isHowItWorksOpen && (
-                  <div className="p-5 pt-0 text-sm text-gray-600 leading-relaxed bg-white border-t border-gray-100">
-                    <ul className="space-y-3 mt-3">
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500 mt-0.5">•</span>
-                        <span><strong>זיהוי קבצים:</strong> המערכת מחפשת באופן אוטומטי מיילים המכילים חשבוניות, קבלות וקבצי PDF או תמונות.</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500 mt-0.5">•</span>
-                        <span><strong>פענוח חכם (AI):</strong> כל קובץ שנסרק מועבר למערכת OCR ובינה מלאכותית המזהה אוטומטית את הספק, התאריך והסכום.</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500 mt-0.5">•</span>
-                        <span><strong>סריקה ברקע:</strong> התהליך מתבצע במלואו בענן. גם אם תסגור את החלון או תכבה את המחשב, הסריקה תמשיך לרוץ והחשבוניות יעודכנו במערכת.</span>
-                      </li>
+                  <div style={{
+                    padding: '0 var(--space-4) var(--space-4) var(--space-4)',
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--color-text-secondary)',
+                    lineHeight: 1.6,
+                    borderTop: '1px solid var(--color-glass-border)'
+                  }}>
+                    <ul style={{ margin: 'var(--space-3) 0 0 0', paddingRight: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                      <li><strong>זיהוי קבצים:</strong> המערכת מחפשת באופן אוטומטי מיילים המכילים חשבוניות, קבלות וקבצי PDF או תמונות.</li>
+                      <li><strong>פענוח חכם (AI):</strong> כל קובץ שנסרק מועבר למערכת OCR ובינה מלאכותית המזהה אוטומטית את הספק, התאריך והסכום.</li>
+                      <li><strong>סריקה ברקע:</strong> התהליך מתבצע במלואו בענן. גם אם תסגור את החלון או תכבה את המחשב, הסריקה תמשיך לרוץ והחשבוניות יעודכנו במערכת.</li>
                     </ul>
                   </div>
                 )}
@@ -517,73 +649,95 @@ export default function GmailSyncManager() {
             </div>
 
             {/* LEFT COLUMN (History Table) */}
-            <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-r border-gray-200 pt-8 lg:pt-0 lg:pr-10">
-              <div className="flex flex-col h-full">
-                <div className="mb-6 flex items-center justify-between">
-                  <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    היסטוריית סריקות
-                  </h3>
-                  
-                  {actualLastRun && (
-                    <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                      סריקה אחרונה: {formatDateTime(actualLastRun.started_at)}
-                    </div>
-                  )}
-                </div>
-
-                {recentRuns.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-center">
-                    <div className="w-12 h-12 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-gray-500">טרם בוצעו סריקות במערכת</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recentRuns.map((run) => (
-                      <div 
-                        key={run.id}
-                        className={`p-4 rounded-2xl border ${run.status === 'completed' ? 'border-green-100 bg-green-50/30' : run.status === 'failed' ? 'border-red-100 bg-red-50/30' : 'border-blue-100 bg-blue-50/30'} flex flex-col gap-3 transition-colors hover:shadow-sm`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                                run.status === 'completed' ? 'bg-green-100 text-green-600' :
-                                run.status === 'failed' ? 'bg-red-100 text-red-600' :
-                                'bg-blue-100 text-blue-600 animate-pulse'
-                            }`}>
-                              {run.status === 'completed' ? '✓' : run.status === 'failed' ? '✗' : '↻'}
-                            </div>
-                            <div>
-                              <div className="font-bold text-gray-900 text-sm">{formatDateTime(run.started_at)}</div>
-                              <div className="text-xs font-semibold text-gray-500 mt-0.5">
-                                {run.trigger_type === 'cron' ? 'סריקה אוטומטית' : 'סריקה יזומה (ידני)'}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="text-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
-                            <div className="text-xs text-gray-500 font-medium mb-0.5">חשבוניות</div>
-                            <div className="font-bold text-gray-900 leading-none">+{run.new_invoices_count}</div>
-                          </div>
-                        </div>
-
-                        {run.status === 'failed' && run.error_message && (
-                          <div className="text-xs text-red-600 bg-red-50 p-2 rounded-lg mt-1 font-medium">
-                            שגיאה: {run.error_message}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+            <div style={{
+              background: 'var(--color-bg-secondary)',
+              border: '1px solid var(--color-glass-border)',
+              borderRadius: 'var(--radius-xl)',
+              padding: 'var(--space-5)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📜</span>
+                  <span>היסטוריית סריקות</span>
+                </h3>
+                
+                {actualLastRun && (
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', background: 'var(--color-bg-tertiary)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
+                    אחרונה: {formatDateTime(actualLastRun.started_at)}
                   </div>
                 )}
               </div>
+
+              {recentRuns.length === 0 ? (
+                <div style={{
+                  padding: 'var(--space-8) var(--space-4)',
+                  textAlign: 'center',
+                  background: 'var(--color-bg-primary)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px dashed var(--color-glass-border)'
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: 'var(--space-2)' }}>📋</div>
+                  <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
+                    טרם בוצעו סריקות מתועדות
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  {recentRuns.map((run) => (
+                    <div 
+                      key={run.id}
+                      style={{
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderRadius: 'var(--radius-lg)',
+                        background: 'var(--color-bg-primary)',
+                        border: '1px solid var(--color-glass-border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 'var(--space-3)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: '0.9rem',
+                          background: run.status === 'completed' ? 'var(--color-success-muted)' : run.status === 'failed' ? 'var(--color-error-muted)' : 'var(--color-warning-muted)',
+                          color: run.status === 'completed' ? 'var(--color-success)' : run.status === 'failed' ? 'var(--color-error)' : 'var(--color-warning)'
+                        }}>
+                          {run.status === 'completed' ? '✓' : run.status === 'failed' ? '✗' : '↻'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                            {formatDateTime(run.started_at)}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                            {run.trigger_type === 'cron' ? '🤖 סריקה אוטומטית' : '👤 סריקה יזומה'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'var(--color-bg-tertiary)',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        minWidth: '50px'
+                      }}>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>חשבוניות</div>
+                        <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 800, color: 'var(--color-accent)' }}>+{run.new_invoices_count}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
           </div>
         )}
       </div>
