@@ -66,12 +66,22 @@ export default function CsvImporter() {
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ inserted: number, duplicates: number, errors: number, skippedLines?: any[] } | null>(null);
 
+  // Card charge dates (saved day-of-month per card)
+  const [cardChargeDates, setCardChargeDates] = useState<{card_last_digits: string, charge_day: number}[]>([]);
+  const [cardChargeDay, setCardChargeDay] = useState<string>('');  // editable charge day for current card
+  const [isKnownCard, setIsKnownCard] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/column-mappings')
       .then(res => res.json())
       .then(data => setSavedMappings(data.mappings || []))
+      .catch(console.error);
+
+    fetch('/api/card-charge-dates')
+      .then(res => res.json())
+      .then(data => setCardChargeDates(data.cardChargeDates || []))
       .catch(console.error);
   }, []);
 
@@ -139,6 +149,18 @@ export default function CsvImporter() {
 
       setBlocks(blocks);
       setExtractedCardDigits(metadata?.cardLastDigits || null);
+      
+      // Auto-detect charge day for extracted card
+      if (metadata?.cardLastDigits) {
+        const saved = cardChargeDates.find(c => c.card_last_digits === metadata.cardLastDigits);
+        if (saved) {
+          setCardChargeDay(saved.charge_day.toString());
+          setIsKnownCard(true);
+        } else {
+          setCardChargeDay('');
+          setIsKnownCard(false);
+        }
+      }
       
       // Auto-detect mapping if headers match a saved pattern, and select the correct block
       autoDetectMapping(blocks);
@@ -299,6 +321,39 @@ export default function CsvImporter() {
     if (data.length === 0) {
       alert('אין נתונים תקינים לייבוא. וודא שמיפית תאריך וסכום בצורה נכונה.');
       return;
+    }
+
+    // Validate charge_date: if no charge_date column is mapped and no global override, require it
+    const hasChargeDateColumn = fieldMap.charge_date !== '';
+    const hasChargeDateOverride = !!chargeDateOverride;
+    const currentCard = extractedCardDigits || null;
+    
+    if (!hasChargeDateColumn && !hasChargeDateOverride) {
+      alert('נא למלא תאריך חיוב גלובלי או למפות עמודת תאריך חיוב.');
+      return;
+    }
+    
+    // Save card charge day if provided for a new card
+    if (currentCard && cardChargeDay && !isKnownCard) {
+      try {
+        await fetch('/api/card-charge-dates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ card_last_digits: currentCard, charge_day: parseInt(cardChargeDay) })
+        });
+      } catch (e) { console.error('Failed to save card charge day', e); }
+    } else if (currentCard && cardChargeDay && isKnownCard) {
+      // Update existing card if user changed the charge day
+      const saved = cardChargeDates.find(c => c.card_last_digits === currentCard);
+      if (saved && saved.charge_day.toString() !== cardChargeDay) {
+        try {
+          await fetch('/api/card-charge-dates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card_last_digits: currentCard, charge_day: parseInt(cardChargeDay) })
+          });
+        } catch (e) { console.error('Failed to update card charge day', e); }
+      }
     }
 
     setIsImporting(true);
@@ -462,16 +517,17 @@ export default function CsvImporter() {
 
           <div style={{ marginBottom: 'var(--space-6)', background: 'var(--color-bg-tertiary)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)' }}>
             <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>הגדרות גלובליות לקובץ</h4>
-            <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
                 <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>
-                  תאריך חיוב כללי (אם חסר בעמודות):
+                  תאריך חיוב כללי (אם חסר בעמודות):{!fieldMap.charge_date && ' *'}
                 </label>
                 <input
                   type="date"
                   value={chargeDateOverride}
                   onChange={(e) => setChargeDateOverride(e.target.value)}
                   style={{ width: '200px' }}
+                  required={!fieldMap.charge_date}
                 />
               </div>
               {extractedCardDigits && (
@@ -481,6 +537,35 @@ export default function CsvImporter() {
                   </label>
                   <div style={{ fontWeight: 'bold', fontSize: 'var(--font-size-sm)', padding: 'var(--space-2) 0' }}>
                     **** {extractedCardDigits}
+                  </div>
+                </div>
+              )}
+              {extractedCardDigits && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>
+                    יום חיוב בחודש לכרטיס זה:{!isKnownCard ? ' *' : ''}
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={cardChargeDay}
+                      onChange={(e) => setCardChargeDay(e.target.value)}
+                      placeholder="יום (1-31)"
+                      style={{ width: '100px' }}
+                      required={!isKnownCard}
+                    />
+                    {isKnownCard && (
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success)' }}>
+                        ✔️ שמור במערכת
+                      </span>
+                    )}
+                    {!isKnownCard && (
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)' }}>
+                        ⚠️ כרטיס חדש — נא למלא יום חיוב
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

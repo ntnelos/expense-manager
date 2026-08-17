@@ -79,7 +79,7 @@ export default function MatchingArena() {
   // Note modal
   const [noteLine, setNoteLine] = useState<ExpenseLine | null>(null);
 
-  // Month selector
+  // Month selector — empty string means "all months"
   const [chargeMonth, setChargeMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -91,7 +91,7 @@ export default function MatchingArena() {
       const invRes = await fetch('/api/invoices?status=new,error&limit=10000');
       const invData = await invRes.json();
 
-      const expRes = await fetch(`/api/expense-lines?chargeMonth=${chargeMonth}&limit=1000`);
+      const expRes = await fetch(`/api/expense-lines?${chargeMonth ? `chargeMonth=${chargeMonth}&` : ''}limit=1000`);
       const expData = await expRes.json();
 
       if (invRes.ok) setInvoices(invData.invoices || []);
@@ -493,7 +493,19 @@ export default function MatchingArena() {
               )}
             </div>
             <div style={{ fontSize: 'var(--font-size-xs)' }}>{line.description}</div>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{formatToIsraeliDate(line.transaction_date)}</div>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+              {(() => {
+                const fmtShort = (d: string | null) => {
+                  if (!d) return '—';
+                  const date = new Date(d);
+                  if (isNaN(date.getTime())) return '—';
+                  return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                };
+                const txDate = fmtShort(line.transaction_date);
+                const chDate = line.charge_date ? fmtShort(line.charge_date) : null;
+                return chDate ? `הוצאה מה-${txDate} | יחוייב ב-${chDate}` : txDate;
+              })()}
+            </div>
             {line.approval_note && (
               <div style={{ fontSize: '10px', color: 'var(--color-accent)', marginTop: '2px', fontStyle: 'italic' }}>
                 📝 {line.approval_note}
@@ -614,6 +626,13 @@ export default function MatchingArena() {
             value={chargeMonth}
             onChange={(e) => setChargeMonth(e.target.value)}
           />
+          <button
+            className={`btn ${chargeMonth === '' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+            onClick={() => setChargeMonth('')}
+            style={chargeMonth === '' ? { background: 'var(--color-accent)' } : {}}
+          >
+            כל החודשים
+          </button>
           <button
             className="btn btn-secondary"
             onClick={() => window.open(`/api/export?chargeMonth=${chargeMonth}&status=all`, '_blank')}

@@ -353,6 +353,7 @@ export default function ExpenseLineGrid() {
                   />
                 </th>
                 <th>תאריך עסקה</th>
+                <th>מועד חיוב</th>
                 <th>תיאור / עסק</th>
                 <th>סכום</th>
                 <th>קטגוריה מקורית</th>
@@ -372,6 +373,7 @@ export default function ExpenseLineGrid() {
                     />
                   </td>
                   <td>{formatToIsraeliDate(line.transaction_date)}</td>
+                  <td>{formatToIsraeliDate(line.charge_date)}</td>
                   <td style={{ fontWeight: 600 }}>
                     {line.description || '—'}
                     {line.approval_note && (

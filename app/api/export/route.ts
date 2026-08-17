@@ -42,9 +42,8 @@ export async function GET(req: Request) {
       const nextYear = endMonth === 12 ? endYear + 1 : endYear;
       const endDateQuery = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
       
-      // we check if charge_date is within the month. 
-      // If charge_date is null, we fallback to transaction_date.
-      query = query.or(`and(charge_date.gte.${startDateQuery},charge_date.lt.${endDateQuery}),and(charge_date.is.null,transaction_date.gte.${startDateQuery},transaction_date.lt.${endDateQuery})`);
+      // Filter strictly by charge_date only (no fallback to transaction_date)
+      query = query.gte('charge_date', startDateQuery).lt('charge_date', endDateQuery);
     } else {
       if (startDate) {
         query = query.gte('transaction_date', startDate);
