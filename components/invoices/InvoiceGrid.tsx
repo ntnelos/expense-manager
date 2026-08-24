@@ -13,11 +13,11 @@ interface Category {
   color: string;
 }
 
-function formatCurrency(amount: number | null): string {
+function formatCurrency(amount: number | null, currency: string = 'ILS'): string {
   if (amount === null || amount === undefined) return '—';
   return new Intl.NumberFormat('he-IL', {
     style: 'currency',
-    currency: 'ILS',
+    currency: currency,
   }).format(amount);
 }
 
@@ -508,9 +508,20 @@ export default function InvoiceGrid() {
                   <td>{inv.supplier_tax_id || '—'}</td>
                   <td className="table-date">{formatToIsraeliDate(inv.invoice_date)}</td>
                   <td className="table-date" style={{ color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>{formatToIsraeliDate(inv.created_at)}</td>
-                  <td className="table-amount">{formatCurrency(inv.total_amount)}</td>
+                  <td className="table-amount">
+                    {inv.currency && inv.currency !== 'ILS' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
+                        <span>{formatCurrency(inv.original_amount || inv.total_amount, inv.currency)}</span>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
+                          ({formatCurrency(inv.total_amount, 'ILS')})
+                        </span>
+                      </div>
+                    ) : (
+                      formatCurrency(inv.total_amount, 'ILS')
+                    )}
+                  </td>
                   <td className="table-amount" style={{ color: 'var(--color-text-secondary)' }}>
-                    {formatCurrency(inv.vat_amount)}
+                    {formatCurrency(inv.vat_amount, 'ILS')}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select

@@ -50,6 +50,7 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
     invoice_date: '',
     total_amount: '',
     currency: 'ILS',
+    original_amount: '',
   });
 
   // Reset form when invoice changes
@@ -61,6 +62,7 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
         invoice_date: invoice.invoice_date || '',
         total_amount: invoice.total_amount?.toString() || '',
         currency: invoice.currency || 'ILS',
+        original_amount: invoice.original_amount?.toString() || '',
       });
       setIsEditing(false);
 
@@ -95,6 +97,7 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
           invoice_date: formData.invoice_date,
           total_amount: formData.total_amount ? parseFloat(formData.total_amount) : null,
           currency: formData.currency,
+          original_amount: formData.currency !== 'ILS' && formData.original_amount ? parseFloat(formData.original_amount) : null,
         }),
       });
 
@@ -110,6 +113,45 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const calculateExchangeRate = async () => {
+    if (!formData.invoice_date || !formData.currency || formData.currency === 'ILS' || !formData.original_amount) return;
+    try {
+      const response = await fetch(`https://api.frankfurter.dev/v1/${formData.invoice_date}?base=${formData.currency}&symbols=ILS`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.rates && data.rates.ILS) {
+          const rate = data.rates.ILS;
+          setFormData(prev => ({
+            ...prev,
+            total_amount: (Math.round(Number(prev.original_amount) * rate * 100) / 100).toString()
+          }));
+        }
+      } else {
+        alert('שגיאה במשיכת שער חליפין');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בחישוב המרה');
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    if (name === 'currency') {
+      if (value !== 'ILS' && (!formData.original_amount || formData.original_amount === '')) {
+        setFormData((prev) => ({ 
+          ...prev, 
+          currency: value, 
+          original_amount: prev.total_amount 
+        }));
+        return;
+      }
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const detailItemStyle: React.CSSProperties = {
@@ -216,19 +258,40 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                 </div>
 
                 <div style={detailItemStyle}>
-                  <span style={labelStyle}>סכום כולל</span>
+                  <span style={labelStyle}>סכום במטבע המקורי</span>
                   {isEditing ? (
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <input type="number" step="0.01" className="input" value={formData.total_amount} onChange={e => setFormData({...formData, total_amount: e.target.value})} style={{ textAlign: 'left', padding: '4px', maxWidth: '100px' }} />
-                      <select className="input" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} style={{ padding: '4px' }}>
+                      {formData.currency !== 'ILS' ? (
+                        <>
+                          <input type="number" step="0.01" className="input" name="original_amount" value={formData.original_amount} onChange={handleInputChange} style={{ textAlign: 'left', padding: '4px', maxWidth: '80px' }} />
+                          <button type="button" onClick={calculateExchangeRate} className="btn btn-secondary btn-sm" style={{ padding: '0 8px' }}>💱 לשקלים</button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>בחר מטבע אחר</span>
+                      )}
+                      <select className="input" name="currency" value={formData.currency} onChange={handleInputChange} style={{ padding: '4px' }}>
                         <option value="ILS">₪ ILS</option>
                         <option value="USD">$ USD</option>
                         <option value="EUR">€ EUR</option>
                       </select>
                     </div>
                   ) : (
+                    <span style={{ ...valueStyle, color: 'var(--color-text-primary)' }}>
+                      {invoice.currency && invoice.currency !== 'ILS' ? `${formatCurrency(invoice.original_amount, invoice.currency)} (${invoice.currency})` : '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div style={detailItemStyle}>
+                  <span style={labelStyle}>סכום כולל (בשקלים)</span>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <input type="number" step="0.01" className="input" name="total_amount" value={formData.total_amount} onChange={handleInputChange} style={{ textAlign: 'left', padding: '4px', maxWidth: '100px' }} />
+                      <span style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-secondary)' }}>₪</span>
+                    </div>
+                  ) : (
                     <span style={{ ...valueStyle, color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--font-size-md)' }}>
-                      {formatCurrency(invoice.total_amount, invoice.currency || 'ILS')}
+                      {formatCurrency(invoice.total_amount, 'ILS')}
                     </span>
                   )}
                 </div>
@@ -251,12 +314,6 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
                 <span style={labelStyle}>מע״מ</span>
                 <span style={valueStyle}>{formatCurrency(invoice.vat_amount, 'ILS')}</span>
               </div>
-              {invoice.original_amount && invoice.currency && invoice.currency !== 'ILS' && (
-                <div style={detailItemStyle}>
-                  <span style={labelStyle}>סכום מקורי</span>
-                  <span style={valueStyle}>{formatCurrency(invoice.original_amount, invoice.currency)} ({invoice.currency})</span>
-                </div>
-              )}
               <div style={detailItemStyle}>
                 <span style={labelStyle}>סכום שהותאם</span>
                 <span style={{ ...valueStyle, color: 'var(--color-success)' }}>{formatCurrency(invoice.matched_amount, 'ILS')}</span>

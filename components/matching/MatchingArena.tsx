@@ -11,11 +11,11 @@ import DirectUploadModal from '../invoices/DirectUploadModal';
 import DeleteExpenseModal from '../expense-lines/DeleteExpenseModal';
 import NoteModal from '../expense-lines/NoteModal';
 
-function formatCurrency(amount: number | null): string {
+function formatCurrency(amount: number | null, currency: string = 'ILS'): string {
   if (amount === null || amount === undefined) return '—';
   return new Intl.NumberFormat('he-IL', {
     style: 'currency',
-    currency: 'ILS',
+    currency: currency,
   }).format(amount);
 }
 
@@ -799,7 +799,16 @@ export default function MatchingArena() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: isSelected ? 'var(--color-accent)' : 'inherit' }}>
-                      {formatCurrency(inv.total_amount)}
+                      {inv.currency && inv.currency !== 'ILS' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>{formatCurrency(inv.original_amount || inv.total_amount, inv.currency)}</span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>
+                            ({formatCurrency(inv.total_amount, 'ILS')})
+                          </span>
+                        </div>
+                      ) : (
+                        formatCurrency(inv.total_amount, 'ILS')
+                      )}
                     </div>
                     <div style={{ fontSize: '10px', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                       {inv.original_filename?.split('.').pop()?.toUpperCase()}
