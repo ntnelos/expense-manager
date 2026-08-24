@@ -62,8 +62,7 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
         total_amount: invoice.total_amount?.toString() || '',
         currency: invoice.currency || 'ILS',
       });
-      // Auto-open edit mode if it's an error invoice
-      setIsEditing(invoice.status === 'error');
+      setIsEditing(false);
 
       // Fetch matched expense lines if matched
       if (invoice.status === 'fully_matched' || invoice.status === 'partially_matched') {
@@ -146,11 +145,6 @@ export default function InvoiceDetailPanel({ invoice, onClose, onSaved }: Invoic
             <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>
               פרטי חשבונית
             </h2>
-            {invoice?.status === 'error' && (
-              <span style={{ background: 'var(--color-warning-muted)', color: 'var(--color-warning)', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
-                ⚠️ זיהוי נכשל
-              </span>
-            )}
           </div>
           <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: 'var(--space-2)' }}>
             ✕ סגור
