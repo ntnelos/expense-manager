@@ -20,7 +20,7 @@ export interface Invoice {
   matched_amount: number;
   sent_to_accountant: boolean | null;
   document_type: 'tax_invoice' | 'receipt' | 'tax_invoice_receipt' | 'other' | null;
-  status: 'new' | 'processing' | 'partially_matched' | 'fully_matched' | 'error' | 'approved_no_expense';
+  status: 'new' | 'partially_matched' | 'fully_matched' | 'approved_no_expense';
   approval_note?: string;
   raw_ocr_data: Record<string, unknown> | null;
   rotation_angle: number;

@@ -31,7 +31,6 @@ function translateInvoiceStatus(status: string) {
     case 'partially_matched': return { label: 'הותאם חלקית', cls: 'badge-warning' };
     case 'approved_no_expense': return { label: 'אושר ללא הוצאה', cls: 'badge-primary' };
     case 'new': return { label: 'חדש', cls: 'badge-info' };
-    case 'processing': return { label: 'בעיבוד', cls: 'badge-info' };
     default: return { label: status, cls: 'badge-secondary' };
   }
 }

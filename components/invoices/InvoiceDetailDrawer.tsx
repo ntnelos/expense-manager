@@ -53,6 +53,8 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
         currency: invoice.currency || 'ILS',
         original_amount: invoice.original_amount || 0,
         rotation_angle: invoice.rotation_angle || 0,
+        status: invoice.status || 'new',
+        approval_note: invoice.approval_note || '',
       });
       setSelectedCategoryId((invoice as any).category_id || '');
 
@@ -596,6 +598,39 @@ export default function InvoiceDetailDrawer({ invoice, onClose, onUpdate, onDele
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
+                  Status (סטטוס)
+                </label>
+                <select
+                  name="status"
+                  value={formData.status || 'new'}
+                  onChange={handleInputChange}
+                  style={{ width: '100%' }}
+                >
+                  <option value="new">חדש</option>
+                  <option value="partially_matched">הותאם חלקי</option>
+                  <option value="fully_matched">הותאם</option>
+                  <option value="approved_no_expense">אושר ללא הוצאה</option>
+                </select>
+              </div>
+
+              {/* Approval Note */}
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>
+                  Explanation (שורת הסבר / הערה)
+                </label>
+                <input
+                  type="text"
+                  name="approval_note"
+                  value={formData.approval_note || ''}
+                  onChange={handleInputChange}
+                  style={{ width: '100%' }}
+                  placeholder="הזן הערה לחשבונית..."
+                />
               </div>
 
               {/* Metadata Read-Only */}

@@ -149,7 +149,7 @@ export async function GET(req: Request) {
       i => i.status === 'approved_no_expense'
     ).length;
     const pendingInvoices = invoicesList.filter(
-      i => i.status === 'new' || i.status === 'processing'
+      i => i.status === 'new'
     ).length;
     const sentToAccountantCount = invoicesList.filter(
       i => i.sent_to_accountant === true

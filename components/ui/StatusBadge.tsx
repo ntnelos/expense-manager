@@ -6,10 +6,8 @@ type StatusType = InvoiceStatus | ExpenseLineStatus;
 
 const STATUS_CONFIG: Record<StatusType, { label: string; className: string }> = {
   new: { label: 'חדש', className: 'badge-new' },
-  processing: { label: 'בעיבוד', className: 'badge-processing' },
   partially_matched: { label: 'חלקי', className: 'badge-partial' },
   fully_matched: { label: 'הותאם', className: 'badge-matched' },
-  error: { label: 'שגיאה', className: 'badge-error' },
   approved: { label: 'אושר', className: 'badge-approved' },
   unapproved: { label: 'לא אושר', className: 'badge-unapproved' },
   approved_no_invoice: { label: 'ללא חשבונית', className: 'badge-no-invoice' },

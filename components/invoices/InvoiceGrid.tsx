@@ -21,12 +21,11 @@ function formatCurrency(amount: number | null): string {
   }).format(amount);
 }
 
-type StatusTab = 'pending' | 'matched' | 'error' | 'sent' | 'all';
+type StatusTab = 'pending' | 'matched' | 'sent' | 'all';
 
 const STATUS_TAB_MAP: Record<StatusTab, string> = {
-  pending: 'new,processing,partially_matched',
+  pending: 'new,partially_matched',
   matched: 'fully_matched,approved_no_expense',
-  error: 'error',
   sent: '', // handled separately by sentToAccountant=true
   all: '',
 };
@@ -34,7 +33,6 @@ const STATUS_TAB_MAP: Record<StatusTab, string> = {
 const STATUS_TAB_LABELS: Record<StatusTab, string> = {
   pending: 'ממתין',
   matched: 'הותאם',
-  error: 'שגיאה',
   sent: 'נשלח לרו״ח',
   all: 'הכל',
 };
@@ -42,7 +40,6 @@ const STATUS_TAB_LABELS: Record<StatusTab, string> = {
 const STATUS_TAB_ICONS: Record<StatusTab, string> = {
   pending: '⏳',
   matched: '✅',
-  error: '⚠️',
   sent: '📨',
   all: '📋',
 };
@@ -73,7 +70,7 @@ export default function InvoiceGrid() {
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Tab counts
-  const [tabCounts, setTabCounts] = useState<Record<StatusTab, number>>({ pending: 0, matched: 0, error: 0, sent: 0, all: 0 });
+  const [tabCounts, setTabCounts] = useState<Record<StatusTab, number>>({ pending: 0, matched: 0, sent: 0, all: 0 });
 
   // Selected Invoice for Drawer
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -89,8 +86,8 @@ export default function InvoiceGrid() {
   // Fetch tab counts
   const fetchTabCounts = useCallback(async () => {
     try {
-      const tabs: StatusTab[] = ['pending', 'matched', 'error', 'sent', 'all'];
-      const counts: Record<StatusTab, number> = { pending: 0, matched: 0, error: 0, sent: 0, all: 0 };
+      const tabs: StatusTab[] = ['pending', 'matched', 'sent', 'all'];
+      const counts: Record<StatusTab, number> = { pending: 0, matched: 0, sent: 0, all: 0 };
       
       await Promise.all(tabs.map(async (tab) => {
         const statusParam = STATUS_TAB_MAP[tab];
@@ -297,7 +294,6 @@ export default function InvoiceGrid() {
     switch (tab) {
       case 'pending': return { ...baseStyle, color: '#f59e0b', borderBottomColor: '#f59e0b' };
       case 'matched': return { ...baseStyle, color: '#10b981', borderBottomColor: '#10b981' };
-      case 'error': return { ...baseStyle, color: '#ef4444', borderBottomColor: '#ef4444' };
       case 'sent': return { ...baseStyle, color: '#8b5cf6', borderBottomColor: '#8b5cf6' };
       case 'all': return { ...baseStyle, color: 'var(--color-accent)', borderBottomColor: 'var(--color-accent)' };
     }
@@ -307,7 +303,7 @@ export default function InvoiceGrid() {
     <div>
       {/* Status Tabs */}
       <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--color-glass-border)', marginBottom: 'var(--space-4)' }}>
-        {(['pending', 'matched', 'sent', 'error', 'all'] as StatusTab[]).map((tab) => (
+        {(['pending', 'matched', 'sent', 'all'] as StatusTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabChange(tab)}
@@ -411,32 +407,28 @@ export default function InvoiceGrid() {
             </select>
 
             {/* Status Filter */}
-            {activeTab !== 'error' && (
-              <select
-                value={filterStatus}
-                onChange={(e) => {
-                  setFilterStatus(e.target.value);
-                  setPage(1);
-                }}
-                style={{ maxWidth: '150px' }}
-              >
-                <option value="">כל הסטטוסים</option>
-                {(activeTab === 'pending' || activeTab === 'all' || activeTab === 'sent') && (
-                  <>
-                    <option value="new">חדש</option>
-                    <option value="processing">בטיפול</option>
-                    <option value="partially_matched">הותאם חלקי</option>
-                  </>
-                )}
-                {(activeTab === 'matched' || activeTab === 'all' || activeTab === 'sent') && (
-                  <>
-                    <option value="fully_matched">הותאם</option>
-                    <option value="approved_no_expense">אושר ללא הוצאה</option>
-                  </>
-                )}
-                {(activeTab === 'all' || activeTab === 'sent') && <option value="error">שגיאה</option>}
-              </select>
-            )}
+            <select
+              value={filterStatus}
+              onChange={(e) => {
+                setFilterStatus(e.target.value);
+                setPage(1);
+              }}
+              style={{ maxWidth: '150px' }}
+            >
+              <option value="">כל הסטטוסים</option>
+              {(activeTab === 'pending' || activeTab === 'all' || activeTab === 'sent') && (
+                <>
+                  <option value="new">חדש</option>
+                  <option value="partially_matched">הותאם חלקי</option>
+                </>
+              )}
+              {(activeTab === 'matched' || activeTab === 'all' || activeTab === 'sent') && (
+                <>
+                  <option value="fully_matched">הותאם</option>
+                  <option value="approved_no_expense">אושר ללא הוצאה</option>
+                </>
+              )}
+            </select>
 
             {/* Reset Button */}
             {(search || dateFrom || dateTo || minAmount || maxAmount || categoryId || filterStatus) && (
