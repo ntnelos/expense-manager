@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { Readable } from 'stream';
 import JSZip from 'jszip';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max duration for this endpoint
 
 async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer | Uint8Array, mimeType: string): Promise<{ id: string; url: string }> {

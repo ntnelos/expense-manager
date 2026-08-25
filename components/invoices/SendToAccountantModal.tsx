@@ -21,6 +21,14 @@ export default function SendToAccountantModal() {
     try {
       const url = `/api/export/accountant/prepare`;
       const res = await fetch(url);
+      
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const text = await res.text();
+        console.error('Server returned HTML instead of JSON:', text);
+        throw new Error('שגיאת שרת: התקבלה תשובה לא תקינה מהשרת. ייתכן שהפעולה לקחה זמן רב מדי או שיש שגיאת מערכת.');
+      }
+      
       const data = await res.json();
       
       if (!res.ok) {
