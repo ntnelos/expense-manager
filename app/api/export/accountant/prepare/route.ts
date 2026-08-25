@@ -87,6 +87,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'לא נמצאו חשבוניות להעברה בחודש זה' }, { status: 400 });
     }
 
+    console.log(`Found ${invoices.length} invoices to process.`);
     const drive = getDriveClient();
     
     // 3. Generate Excel
@@ -187,14 +188,19 @@ export async function GET(req: Request) {
     const pdfBuffersList: Buffer[] = [];
     const timestamp = new Date().getTime();
     
+    console.log(`Starting to process ${invoicesToProcess.length} PDF files...`);
+    
     let mergedPdf = await PDFDocument.create();
     let currentChunkSize = 0;
     let chunkIndex = 0;
+    let processedCount = 0;
     
     for (const inv of invoicesToProcess) {
       if (!inv.drive_file_id) continue;
       
       try {
+        processedCount++;
+        if (processedCount % 10 === 0) console.log(`Processed ${processedCount}/${invoicesToProcess.length} files...`);
         const response = await drive.files.get(
           { fileId: inv.drive_file_id, alt: 'media', supportsAllDrives: true },
           { responseType: 'arraybuffer' }
@@ -255,10 +261,12 @@ export async function GET(req: Request) {
           }
         }
       } catch (e) {
-        console.error(`Failed to process file ${inv.drive_file_id}`, e);
+        console.error(`Failed to process file ${inv.drive_file_id}:`, e);
       }
     } // Close loop
       
+    console.log(`Finished processing PDFs. Saving final chunks...`);
+    
     // Save the last chunk if not empty
     if (currentChunkSize > 0 || chunkIndex === 0) {
       const mergedPdfBytes = await mergedPdf.save();
@@ -269,6 +277,8 @@ export async function GET(req: Request) {
       const pdfFile = await uploadExportToDrive(drive, `Invoices_Export_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
       pdfFiles.push(pdfFile);
     }
+
+    console.log(`Uploading Excel and ZIP to Google Drive...`);
 
     // 3. Upload to Google Drive Temp Folder
     const excelFile = await uploadExportToDrive(drive, `Invoices_Export_${timestamp}.xlsx`, excelBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -294,6 +304,15 @@ export async function GET(req: Request) {
 
   } catch (error: any) {
     console.error('Export prepare error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    
+    // Safely extract error message in case error is null, string, or object without message
+    let errorMessage = 'שגיאת שרת לא ידועה';
+    if (error && typeof error === 'object' && error.message) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

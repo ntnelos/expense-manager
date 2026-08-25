@@ -7,16 +7,12 @@ const supabase = createClient(
 );
 
 async function run() {
-  console.log("Running query...");
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, categories(name), matches(expense_line:expense_lines(*))')
-    .limit(1);
+    .select('id')
+    .in('status', ['approved_no_expense', 'fully_matched'])
+    .not('sent_to_accountant', 'eq', true);
     
-  if (error) {
-    console.error("Query Error:", error);
-  } else {
-    console.log("Success! Data length:", data.length);
-  }
+  console.log("Count:", data ? data.length : "error", error);
 }
 run();
