@@ -4,7 +4,6 @@ import { getDriveClient } from '@/lib/google/drive';
 import * as XLSX from 'xlsx';
 import { generateStyledExcel } from '@/lib/utils/excel';
 import { PDFDocument } from 'pdf-lib';
-import sharp from 'sharp';
 import { Readable } from 'stream';
 import JSZip from 'jszip';
 
@@ -231,33 +230,19 @@ export async function GET(req: Request) {
           const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
           copiedPages.forEach(page => mergedPdf.addPage(page));
         } else {
-          // It's an image. First try sharp to normalize and compress to JPG.
+          // It's an image. Embed directly if it's JPG or PNG
           try {
-            const compressedImg = await sharp(fileBuffer)
-              .resize({ width: 1200, withoutEnlargement: true })
-              .jpeg({ quality: 80 })
-              .toBuffer();
-              
-            const img = await mergedPdf.embedJpg(compressedImg);
+            let img;
+            if (inv.original_filename?.toLowerCase().endsWith('.png')) {
+              img = await mergedPdf.embedPng(fileBuffer);
+            } else {
+              img = await mergedPdf.embedJpg(fileBuffer); // default to JPG
+            }
             const { width, height } = img.scale(1);
             const page = mergedPdf.addPage([width, height]);
             page.drawImage(img, { x: 0, y: 0, width, height });
-          } catch (sharpError) {
-            console.error(`Failed to process image with sharp for file ${inv.drive_file_id}:`, sharpError);
-            // Fallback: try to embed directly if it's JPG or PNG
-            try {
-              let img;
-              if (inv.original_filename?.toLowerCase().endsWith('.png')) {
-                img = await mergedPdf.embedPng(fileBuffer);
-              } else {
-                img = await mergedPdf.embedJpg(fileBuffer); // default to JPG
-              }
-              const { width, height } = img.scale(1);
-              const page = mergedPdf.addPage([width, height]);
-              page.drawImage(img, { x: 0, y: 0, width, height });
-            } catch (fallbackError) {
-              console.error(`Fallback embed failed for file ${inv.drive_file_id}:`, fallbackError);
-            }
+          } catch (fallbackError) {
+            console.error(`Fallback embed failed for file ${inv.drive_file_id}:`, fallbackError);
           }
         }
       } catch (e) {
