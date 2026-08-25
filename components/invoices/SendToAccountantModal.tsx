@@ -10,6 +10,7 @@ export default function SendToAccountantModal() {
   const [error, setError] = useState<string | null>(null);
   const [preparedData, setPreparedData] = useState<any>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
   const router = useRouter();
 
   const handlePrepare = async () => {
@@ -17,6 +18,7 @@ export default function SendToAccountantModal() {
     setError(null);
     setPreparedData(null);
     setIsSuccess(false);
+    setLogs([]);
 
     try {
       const url = `/api/export/accountant/prepare`;
@@ -28,14 +30,63 @@ export default function SendToAccountantModal() {
         console.error('Server returned HTML instead of JSON:', text);
         throw new Error('שגיאת שרת: התקבלה תשובה לא תקינה מהשרת. ייתכן שהפעולה לקחה זמן רב מדי או שיש שגיאת מערכת.');
       }
-      
-      const data = await res.json();
-      
+
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to prepare files');
+        const errText = await res.text();
+        throw new Error('שגיאה בגישה לשרת: ' + errText);
       }
 
-      setPreparedData(data);
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) {
+        throw new Error('לא ניתן לקרוא נתונים מהשרת');
+      }
+
+      let done = false;
+      let buffer = '';
+      
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          
+          buffer = lines.pop() || ''; // Keep the incomplete event in the buffer
+          
+          for (const event of lines) {
+            const dataLine = event.split('\n').find(l => l.startsWith('data: '));
+            if (dataLine) {
+              try {
+                const data = JSON.parse(dataLine.substring(6));
+                if (data.type === 'log') {
+                  setLogs(prev => [...prev, data.message]);
+                } else if (data.type === 'progress') {
+                  setLogs(prev => {
+                    const newLogs = [...prev];
+                    if (newLogs.length > 0 && newLogs[newLogs.length - 1].startsWith('מעבד קובץ')) {
+                      newLogs[newLogs.length - 1] = data.message;
+                    } else {
+                      newLogs.push(data.message);
+                    }
+                    return newLogs;
+                  });
+                } else if (data.type === 'complete') {
+                  setPreparedData(data);
+                } else if (data.type === 'error') {
+                  throw new Error(data.error);
+                }
+              } catch (e: any) {
+                if (e.message !== 'Unexpected end of JSON input') {
+                  console.error("Failed to parse SSE event:", event, e);
+                }
+              }
+            }
+          }
+        }
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message);
@@ -86,6 +137,7 @@ export default function SendToAccountantModal() {
     setPreparedData(null);
     setIsSuccess(false);
     setError(null);
+    setLogs([]);
     window.dispatchEvent(new Event('invoices-updated'));
   };
 
@@ -115,9 +167,38 @@ export default function SendToAccountantModal() {
                 </p>
                 
                 {isPreparing && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', margin: 'var(--space-4) 0' }}>
-                    <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                    <div style={{ fontWeight: 600 }}>מכין קבצים... פעולה זו עשויה לקחת מספר דקות</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', margin: 'var(--space-4) 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                      <div className="spinner" style={{ width: '24px', height: '24px', border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                      <div style={{ fontWeight: 600 }}>מכין קבצים... פעולה זו עשויה לקחת מספר דקות</div>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: 'var(--color-surface)', 
+                      padding: 'var(--space-3)', 
+                      borderRadius: 'var(--radius-md)', 
+                      border: '1px solid var(--color-border)',
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      fontSize: '13px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      {logs.length === 0 ? (
+                        <div style={{ color: 'var(--color-text-secondary)' }}>מתחיל תהליך...</div>
+                      ) : (
+                        logs.map((log, i) => (
+                          <div key={i} style={{ 
+                            color: i === logs.length - 1 ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                            fontWeight: i === logs.length - 1 ? 600 : 400
+                          }}>
+                            {i === logs.length - 1 ? '⏳ ' : '✓ '} {log}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
                     <style>{`
                       @keyframes spin {
                         to { transform: rotate(360deg); }
