@@ -70,47 +70,20 @@ async function uploadExportToDrive(drive: any, fileName: string, buffer: Buffer 
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const month = searchParams.get('month'); // YYYY-MM
-    
-    if (!month) {
-      return NextResponse.json({ error: 'Missing month parameter' }, { status: 400 });
-    }
-
     const supabase = createServerClient();
     
-    // Find all matched invoices for this month
-    const startDate = `${month}-01`;
-    const endYear = parseInt(month.split('-')[0]);
-    const endMonth = parseInt(month.split('-')[1]);
-    const nextMonth = endMonth === 12 ? 1 : endMonth + 1;
-    const nextYear = endMonth === 12 ? endYear + 1 : endYear;
-    const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
-
-    // 1. Fetch ALL expense lines for this month
-    let query = supabase
-      .from('expense_lines')
-      .select('*, matches(invoice:invoices(*, categories(name)))');
-      
-    // Filter by charge_date (or transaction_date if null)
-    query = query.or(`and(charge_date.gte.${startDate},charge_date.lt.${endDate}),and(charge_date.is.null,transaction_date.gte.${startDate},transaction_date.lt.${endDate})`);
-    query = query.order('transaction_date', { ascending: false });
-
-    const { data: expenseLines, error: expError } = await query;
-    if (expError) throw expError;
-
-    // 2. Fetch ALL unsent invoices that are ready (fully_matched or approved_no_expense), regardless of date.
-    // This ensures no invoice is left behind in the "matched" tab.
-    const { data: standaloneInvoices, error: invError } = await supabase
+    // Fetch ALL unsent invoices that are ready (fully_matched or approved_no_expense)
+    // We include their matched expense lines to build the Excel report
+    const { data: invoices, error: invError } = await supabase
       .from('invoices')
-      .select('*, categories(name)')
+      .select('*, categories(name), matches(expense_line:expense_lines(*))')
       .in('status', ['approved_no_expense', 'fully_matched'])
       .not('sent_to_accountant', 'eq', true);
 
     if (invError) throw invError;
 
-    if ((!expenseLines || expenseLines.length === 0) && (!standaloneInvoices || standaloneInvoices.length === 0)) {
-      return NextResponse.json({ error: 'לא נמצאו נתונים בחודש זה' }, { status: 400 });
+    if (!invoices || invoices.length === 0) {
+      return NextResponse.json({ error: 'לא נמצאו חשבוניות להעברה בחודש זה' }, { status: 400 });
     }
 
     const drive = getDriveClient();
@@ -148,82 +121,59 @@ export async function GET(req: Request) {
     const exportData: any[] = [];
     const uniqueInvoicesToMerge = new Map<string, any>();
     
-    // Process Expense Lines
-    for (const line of expenseLines || []) {
-      const rawMatches = line.matches;
+    // Process Invoices
+    for (const inv of invoices || []) {
+      uniqueInvoicesToMerge.set(inv.id, inv);
+      
+      const rawMatches = inv.matches;
       const matches = Array.isArray(rawMatches) ? rawMatches : rawMatches ? [rawMatches] : [];
       
       if (matches.length === 0) {
+        // Standalone Invoice (approved_no_expense)
         exportData.push({
-          'תאריך עסקה (הוצאה)': line.transaction_date || '',
-          'תאריך חיוב (הוצאה)': line.charge_date || '',
-          'סכום חיוב (הוצאה)': line.amount || '',
-          'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
-          'פירוט בנק (הוצאה)': line.description || '',
-          'הערה / סיבת אישור': line.approval_note || '',
-          'שם ספק (חשבונית)': '',
-          'ח.פ/עוסק (חשבונית)': '',
-          'מספר חשבונית': '',
-          'תאריך חשבונית': '',
-          'סכום חשבונית': '',
-          'מטבע חשבונית': '',
-          'מע״מ (חשבונית)': '',
-          'קטגוריה': '',
-          'סטטוס התאמה': translateStatus(line.status),
-          'קישור לחשבונית': '',
+          'תאריך עסקה (הוצאה)': '',
+          'תאריך חיוב (הוצאה)': '',
+          'סכום חיוב (הוצאה)': '',
+          'סכום עסקה (הוצאה)': '',
+          'פירוט בנק (הוצאה)': '',
+          'הערה / סיבת אישור': inv.approval_note || '',
+          'שם ספק (חשבונית)': inv.supplier_name || '',
+          'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
+          'מספר חשבונית': inv.invoice_number || '',
+          'תאריך חשבונית': inv.invoice_date || '',
+          'סכום חשבונית': inv.total_amount || '',
+          'מטבע חשבונית': inv.currency || '',
+          'מע״מ (חשבונית)': inv.vat_amount || '',
+          'קטגוריה': inv.categories?.name || '',
+          'סטטוס התאמה': translateStatus(inv.status),
+          'קישור לחשבונית': inv.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: inv.drive_file_url } : '',
         });
       } else {
+        // Matched to one or more expense lines
         matches.forEach((match: any, index: number) => {
-          const invoice = match.invoice;
+          const line = match.expense_line;
           const isDuplicate = index > 0;
           
-          if (invoice && !invoice.sent_to_accountant) {
-            uniqueInvoicesToMerge.set(invoice.id, invoice);
-          }
-
           exportData.push({
-            'תאריך עסקה (הוצאה)': line.transaction_date || '',
-            'תאריך חיוב (הוצאה)': line.charge_date || '',
-            'סכום חיוב (הוצאה)': isDuplicate ? `${line.amount} (העתק)` : line.amount,
-            'סכום עסקה (הוצאה)': line.total_amount || line.amount || '',
-            'פירוט בנק (הוצאה)': isDuplicate ? `${line.description} (העתק)` : line.description,
-            'הערה / סיבת אישור': line.approval_note || '',
-            'שם ספק (חשבונית)': invoice?.supplier_name || '',
-            'ח.פ/עוסק (חשבונית)': invoice?.supplier_tax_id || '',
-            'מספר חשבונית': invoice?.invoice_number || '',
-            'תאריך חשבונית': invoice?.invoice_date || '',
-            'סכום חשבונית': invoice?.total_amount || '',
-            'מטבע חשבונית': invoice?.currency || '',
-            'מע״מ (חשבונית)': invoice?.vat_amount || '',
-            'קטגוריה': invoice?.categories?.name || '',
-            'סטטוס התאמה': translateStatus(line.status),
-            'קישור לחשבונית': invoice?.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: invoice.drive_file_url } : '',
+            'תאריך עסקה (הוצאה)': line?.transaction_date || '',
+            'תאריך חיוב (הוצאה)': line?.charge_date || '',
+            'סכום חיוב (הוצאה)': line ? (isDuplicate ? `${line.amount} (העתק)` : line.amount) : '',
+            'סכום עסקה (הוצאה)': line?.total_amount || line?.amount || '',
+            'פירוט בנק (הוצאה)': line ? (isDuplicate ? `${line.description} (העתק)` : line.description) : '',
+            'הערה / סיבת אישור': line?.approval_note || inv.approval_note || '',
+            'שם ספק (חשבונית)': inv.supplier_name || '',
+            'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
+            'מספר חשבונית': inv.invoice_number || '',
+            'תאריך חשבונית': inv.invoice_date || '',
+            'סכום חשבונית': inv.total_amount || '',
+            'מטבע חשבונית': inv.currency || '',
+            'מע״מ (חשבונית)': inv.vat_amount || '',
+            'קטגוריה': inv.categories?.name || '',
+            'סטטוס התאמה': translateStatus(inv.status),
+            'קישור לחשבונית': inv.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: inv.drive_file_url } : '',
           });
         });
       }
-    }
-
-    // Process Standalone Invoices (approved_no_expense)
-    for (const inv of standaloneInvoices || []) {
-      uniqueInvoicesToMerge.set(inv.id, inv);
-      exportData.push({
-        'תאריך עסקה (הוצאה)': '',
-        'תאריך חיוב (הוצאה)': '',
-        'סכום חיוב (הוצאה)': '',
-        'סכום עסקה (הוצאה)': '',
-        'פירוט בנק (הוצאה)': '',
-        'הערה / סיבת אישור': '',
-        'שם ספק (חשבונית)': inv.supplier_name || '',
-        'ח.פ/עוסק (חשבונית)': inv.supplier_tax_id || '',
-        'מספר חשבונית': inv.invoice_number || '',
-        'תאריך חשבונית': inv.invoice_date || '',
-        'סכום חשבונית': inv.total_amount || '',
-        'מטבע חשבונית': inv.currency || '',
-        'מע״מ (חשבונית)': inv.vat_amount || '',
-        'קטגוריה': inv.categories?.name || '',
-        'סטטוס התאמה': translateStatus(inv.status),
-        'קישור לחשבונית': inv.drive_file_url ? { text: 'צפה בחשבונית', hyperlink: inv.drive_file_url } : '',
-      });
     }
     
     const excelBuffer = await generateStyledExcel(headers, exportData, 'Invoices');
@@ -257,7 +207,7 @@ export async function GET(req: Request) {
           pdfBuffersList.push(pdfBuffer);
           
           chunkIndex++;
-          const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
+          const pdfFile = await uploadExportToDrive(drive, `Invoices_Export_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
           pdfFiles.push(pdfFile);
           
           mergedPdf = await PDFDocument.create();
@@ -315,22 +265,22 @@ export async function GET(req: Request) {
       pdfBuffersList.push(pdfBuffer);
       
       chunkIndex++;
-      const pdfFile = await uploadExportToDrive(drive, `Invoices_${month}_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
+      const pdfFile = await uploadExportToDrive(drive, `Invoices_Export_part${chunkIndex}_${timestamp}.pdf`, pdfBuffer, 'application/pdf');
       pdfFiles.push(pdfFile);
     }
 
     // 3. Upload to Google Drive Temp Folder
-    const excelFile = await uploadExportToDrive(drive, `Invoices_${month}_${timestamp}.xlsx`, excelBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const excelFile = await uploadExportToDrive(drive, `Invoices_Export_${timestamp}.xlsx`, excelBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     // 5. Create a ZIP file for easy downloading
     const zip = new JSZip();
-    zip.file(`Invoices_${month}_${timestamp}.xlsx`, excelBuffer);
+    zip.file(`Invoices_Export_${timestamp}.xlsx`, excelBuffer);
     pdfBuffersList.forEach((buf, idx) => {
-      zip.file(`Invoices_${month}_part${idx + 1}_${timestamp}.pdf`, buf);
+      zip.file(`Invoices_Export_part${idx + 1}_${timestamp}.pdf`, buf);
     });
     
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'STORE' });
-    const zipFile = await uploadExportToDrive(drive, `Export_${month}_All_${timestamp}.zip`, zipBuffer, 'application/zip');
+    const zipFile = await uploadExportToDrive(drive, `Export_All_Pending_${timestamp}.zip`, zipBuffer, 'application/zip');
 
     return NextResponse.json({
       success: true,

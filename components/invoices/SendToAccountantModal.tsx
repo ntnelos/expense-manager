@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 
 export default function SendToAccountantModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [isPreparing, setIsPreparing] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +19,7 @@ export default function SendToAccountantModal() {
     setIsSuccess(false);
 
     try {
-      const url = `/api/export/accountant/prepare?month=${month}`;
+      const url = `/api/export/accountant/prepare`;
       const res = await fetch(url);
       const data = await res.json();
       
@@ -47,7 +46,6 @@ export default function SendToAccountantModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          month,
           invoiceIds: preparedData.invoiceIds,
           pdfFileIds: preparedData.pdfFiles.map((f: any) => f.id),
           excelFileId: preparedData.excel.id
@@ -105,21 +103,8 @@ export default function SendToAccountantModal() {
             {!preparedData && !isSuccess && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
                 <p style={{ color: 'var(--color-text-secondary)' }}>
-                  פעולה זו תיקח את כל החשבוניות המותאמות בחודש הנבחר, תשרשר אותן לקובץ PDF אחד, ותשלח אותן יחד עם אקסל פירוט התאמות לרואה החשבון.
+                  פעולה זו תיקח את <b>כל</b> החשבוניות שאושרו / הותאמו ועדיין לא נשלחו לרואה החשבון (מכל החודשים), תשרשר אותן לקובץ PDF אחד, ותשלח אותן יחד עם אקסל פירוט התאמות.
                 </p>
-                <div>
-                  <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
-                    חודש (תאריך חשבונית)
-                  </label>
-                  <input 
-                    type="month" 
-                    className="input" 
-                    value={month} 
-                    onChange={e => setMonth(e.target.value)} 
-                    style={{ width: '100%', fontSize: 'var(--font-size-md)' }}
-                    disabled={isPreparing}
-                  />
-                </div>
                 
                 {isPreparing && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', margin: 'var(--space-4) 0' }}>
@@ -188,7 +173,7 @@ export default function SendToAccountantModal() {
                   </button>
                   
                   {!preparedData ? (
-                    <button className="btn btn-primary" onClick={handlePrepare} disabled={isPreparing || !month}>
+                    <button className="btn btn-primary" onClick={handlePrepare} disabled={isPreparing}>
                       {isPreparing ? 'מכין קבצים...' : 'המשך'}
                     </button>
                   ) : (

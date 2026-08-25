@@ -8,9 +8,9 @@ export const maxDuration = 300; // 5 minutes max duration for this endpoint
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { month, invoiceIds, pdfFileIds, excelFileId } = body;
+    const { invoiceIds, pdfFileIds, excelFileId } = body;
 
-    if (!month || !invoiceIds || !pdfFileIds || !Array.isArray(pdfFileIds) || !excelFileId) {
+    if (!invoiceIds || !pdfFileIds || !Array.isArray(pdfFileIds) || !excelFileId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -76,12 +76,12 @@ export async function POST(req: Request) {
 
       const boundary = 'foo_bar_baz';
       const emailSubject = totalParts > 1 
-        ? `חשבוניות - חודש ${month} (חלק ${i + 1} מתוך ${totalParts})` 
-        : `חשבוניות - חודש ${month}`;
+        ? `העברת חשבוניות למערכת (חלק ${i + 1} מתוך ${totalParts})` 
+        : `העברת חשבוניות למערכת`;
       
       const bodyText = totalParts > 1
-        ? `מצורפים קבצי החשבוניות לחודש ${month} - חלק ${i + 1} מתוך ${totalParts}.\n${isFirst ? 'בקובץ מצורף גם פירוט ההתאמות באקסל.' : ''}`
-        : `מצורפים קבצי החשבוניות ופירוט התאמות לחודש ${month}.`;
+        ? `מצורפים קבצי החשבוניות - חלק ${i + 1} מתוך ${totalParts}.\n${isFirst ? 'בקובץ מצורף גם פירוט ההתאמות באקסל.' : ''}`
+        : `מצורפים קבצי החשבוניות ופירוט התאמות.`;
 
       let messageLines = [
         `To: ${emailTo}`,
@@ -95,8 +95,8 @@ export async function POST(req: Request) {
         bodyText,
         '',
         `--${boundary}`,
-        `Content-Type: application/pdf; name="Invoices_${month}_part${i + 1}.pdf"`,
-        `Content-Disposition: attachment; filename="Invoices_${month}_part${i + 1}.pdf"`,
+        `Content-Type: application/pdf; name="Invoices_Export_part${i + 1}.pdf"`,
+        `Content-Disposition: attachment; filename="Invoices_Export_part${i + 1}.pdf"`,
         `Content-Transfer-Encoding: base64`,
         '',
         pdfBuffer.toString('base64'),
@@ -106,8 +106,8 @@ export async function POST(req: Request) {
       if (isFirst) {
         messageLines = messageLines.concat([
           `--${boundary}`,
-          `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="Invoices_${month}.xlsx"`,
-          `Content-Disposition: attachment; filename="Invoices_${month}.xlsx"`,
+          `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="Invoices_Export.xlsx"`,
+          `Content-Disposition: attachment; filename="Invoices_Export.xlsx"`,
           `Content-Transfer-Encoding: base64`,
           '',
           excelBuffer.toString('base64'),
