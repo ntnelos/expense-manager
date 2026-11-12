@@ -11,7 +11,8 @@ export interface SyncLogEntry {
 export interface SyncRunState {
   id: string;
   trigger_type: 'manual' | 'cron';
-  status: 'running' | 'completed' | 'failed';
+  // 'partial' = stopped before the time limit with messages still pending; the next run continues from the checkpoint
+  status: 'running' | 'completed' | 'partial' | 'failed';
   started_at: string;
   finished_at?: string | null;
   total_messages: number;
@@ -126,16 +127,22 @@ export class GmailSyncTracker {
     this.persistActiveRunState();
   }
 
-  static async completeRun(newInvoicesCount: number) {
+  static async completeRun(newInvoicesCount: number, options: { remainingMessages?: number } = {}) {
     const run = globalThis.__activeGmailSyncRun;
     if (!run) return;
 
-    run.status = 'completed';
+    const remaining = options.remainingMessages || 0;
+    run.status = remaining > 0 ? 'partial' : 'completed';
     run.finished_at = new Date().toISOString();
     run.new_invoices_count = newInvoicesCount;
-    run.current_step = `סריקה הושלמה! נוספו ${newInvoicesCount} חשבוניות חדשות.`;
 
-    this.log('success', `הסריקה הושלמה בהצלחה. נוספו ${newInvoicesCount} חשבוניות חדשות.`);
+    if (remaining > 0) {
+      run.current_step = `הסריקה נעצרה בגלל מגבלת זמן. נוספו ${newInvoicesCount} חשבוניות, נותרו ${remaining} הודעות לסריקה הבאה.`;
+      this.log('warn', `הסריקה נעצרה לפני מגבלת הזמן של השרת. נוספו ${newInvoicesCount} חשבוניות חדשות. נותרו ${remaining} הודעות - הן ייסרקו בהרצה הבאה (ידנית או אוטומטית מחר).`);
+    } else {
+      run.current_step = `סריקה הושלמה! נוספו ${newInvoicesCount} חשבוניות חדשות.`;
+      this.log('success', `הסריקה הושלמה בהצלחה. נוספו ${newInvoicesCount} חשבוניות חדשות.`);
+    }
 
     await this.persistActiveRunState(true);
 

@@ -6,9 +6,21 @@ import { generateSHA256Hash } from '../utils/hash';
 import { applySupplierAlias } from '../utils/alias';
 import { GmailSyncTracker } from './tracker';
 
+// Route handlers calling this run with maxDuration = 300s. Stop picking up new messages after this
+// budget so the run finishes cleanly (checkpoint saved, run marked 'partial') instead of being killed.
+const TIME_BUDGET_MS = 240_000;
+
+// A message that fails is retried on later runs, up to this many attempts in total.
+const MAX_FAILED_ATTEMPTS = 3;
+
+const FAILED_TABLE = 'gmail_sync_failed_messages';
+
+type QueuedMessage = { id: string; retryAttempts: number | null }; // retryAttempts = null → new message
+
 export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cron' } = {}) {
   const triggerType = options.triggerType || 'manual';
-  
+  const startedAtMs = Date.now();
+
   // Check if a sync is already running
   const existingActive = GmailSyncTracker.getActiveRun();
   if (existingActive && existingActive.status === 'running') {
@@ -76,45 +88,104 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
     const lastDateStr = config.last_sync_at ? new Date(config.last_sync_at).toLocaleDateString('he-IL') : 'תחילת הפעילות';
     GmailSyncTracker.log('info', `מחפש מיילים עם קבצים מצורפים החל מתאריך ${lastDateStr}...`);
     
-    // 3. List messages
-    let response;
+    // 3. List ALL matching messages (follow pagination).
+    // Gmail returns newest first, so stopping at the first page would drop the older messages
+    // for good once the checkpoint moves past them.
+    const rawMessages: { id: string }[] = [];
     try {
-      response = await gmail.users.messages.list({
-        userId: 'me',
-        q: query,
-        maxResults: 100 // Process up to 100 emails at a time
-      });
+      let pageToken: string | undefined;
+      do {
+        const response = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 500,
+          pageToken
+        });
+        for (const m of response.data.messages || []) {
+          if (m.id) rawMessages.push({ id: m.id });
+        }
+        pageToken = response.data.nextPageToken || undefined;
+      } while (pageToken);
     } catch (err: any) {
       console.error('[Gmail Sync] Error fetching messages from Gmail API:', err);
       const msg = `שגיאה בתקשורת עם Google Gmail API: ${err.message || err}`;
       await GmailSyncTracker.failRun(msg);
       return { success: false, message: msg };
     }
-    
-    const rawMessages = response.data.messages || [];
-    
-    if (rawMessages.length === 0) {
+
+    // 3b. Load messages that failed in earlier runs and should be retried.
+    let failedTableAvailable = true;
+    const priorAttempts = new Map<string, number>(); // message_id → attempts so far
+    const retryQueue: QueuedMessage[] = [];
+    {
+      const { data: failedRows, error: failedErr } = await supabase
+        .from(FAILED_TABLE)
+        .select('message_id, attempts')
+        .order('first_failed_at', { ascending: true });
+
+      if (failedErr) {
+        failedTableAvailable = false;
+        console.warn('[Gmail Sync] Failed-messages table unavailable:', failedErr);
+        GmailSyncTracker.log('warn', `טבלת ניסיונות חוזרים (${FAILED_TABLE}) אינה זמינה - יש להריץ את מיגרציה 017. עד אז, הודעה שנכשלת תעצור את קידום נקודת הסריקה כדי שלא תאבד.`);
+      } else {
+        const newIds = new Set(rawMessages.map(m => m.id));
+        for (const row of failedRows || []) {
+          priorAttempts.set(row.message_id, row.attempts);
+          if (!newIds.has(row.message_id) && row.attempts < MAX_FAILED_ATTEMPTS) {
+            retryQueue.push({ id: row.message_id, retryAttempts: row.attempts });
+          }
+        }
+        if (retryQueue.length > 0) {
+          GmailSyncTracker.log('info', `נמצאו ${retryQueue.length} הודעות שנכשלו בעבר - מנסה שוב.`);
+        }
+      }
+    }
+
+    // A message can be both new (after the checkpoint) and already failed before, e.g. when it was
+    // the newest one in the previous run. Keep its attempt count, and skip it once it's exhausted.
+    const newMessages: QueuedMessage[] = [];
+    for (const m of [...rawMessages].reverse()) {
+      const attempts = priorAttempts.get(m.id);
+      if (attempts !== undefined && attempts >= MAX_FAILED_ATTEMPTS) {
+        GmailSyncTracker.log('warn', `הודעה ${m.id} נכשלה כבר ${attempts} פעמים - מדלג (שמורה ב-${FAILED_TABLE} לבדיקה ידנית).`);
+        continue;
+      }
+      newMessages.push({ id: m.id, retryAttempts: attempts ?? null });
+    }
+
+    if (newMessages.length === 0 && retryQueue.length === 0) {
       GmailSyncTracker.log('info', 'לא נמצאו הודעות חדשות מאז הסריקה האחרונה.');
       GmailSyncTracker.updateProgress(0, 0, 'לא נמצאו הודעות חדשות');
       await GmailSyncTracker.completeRun(0);
       return { success: true, count: 0, last_sync_at: config.last_sync_at };
     }
 
-    // Reverse messages to process in chronological order (OLDEST FIRST)
-    // This ensures checkpoint moves forward progressively!
-    const messages = [...rawMessages].reverse();
+    // Retries first (they are older than the checkpoint, so they don't move it), then new messages
+    // in chronological order (OLDEST FIRST) so the checkpoint moves forward progressively.
+    const messages: QueuedMessage[] = [...retryQueue, ...newMessages];
 
-    GmailSyncTracker.log('info', `נמצאו ${messages.length} הודעות מייל לסריקה (נסרקות בסדר כרונולוגי).`);
+    GmailSyncTracker.log('info', `נמצאו ${newMessages.length} הודעות מייל חדשות לסריקה (נסרקות בסדר כרונולוגי).`);
     GmailSyncTracker.updateProgress(0, messages.length, `מתחיל סריקה של ${messages.length} הודעות...`);
-    
+
     let processedCount = 0;
-    const scanStartTime = new Date();
+    let failedCount = 0;
+    let remainingMessages = 0;
+    // Once true, the checkpoint stays put for the rest of the run: a message failed and could not be
+    // queued for retry, so moving past it would lose it.
+    let checkpointFrozen = false;
     let newestMessageDate = config.last_sync_at ? new Date(config.last_sync_at) : new Date('2026-06-10T00:00:00Z');
-    
+
     for (let i = 0; i < messages.length; i++) {
       const msgRef = messages[i];
-      const msgIndexStr = `${i + 1}/${messages.length}`;
-      
+      const isRetry = msgRef.retryAttempts !== null;
+      const msgIndexStr = `${i + 1}/${messages.length}${isRetry ? ' ניסיון חוזר' : ''}`;
+      let subjectForLog: string | null = null;
+
+      if (Date.now() - startedAtMs > TIME_BUDGET_MS) {
+        remainingMessages = messages.length - i;
+        break;
+      }
+
       try {
         GmailSyncTracker.updateProgress(i + 1, messages.length, `בודק הודעה (${msgIndexStr})...`);
 
@@ -129,7 +200,8 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
         // Extract Subject header if available
         const headers = message.payload?.headers || [];
         const subjectHeader = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '(ללא נושא)';
-        
+        subjectForLog = subjectHeader;
+
         // Look for attachments in parts
         const parts = message.payload?.parts || [];
         
@@ -347,10 +419,12 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
             };
             
             if (updateExistingId) {
-               await supabase.from('invoices').update(invoicePayload).eq('id', updateExistingId);
+               const { error: updateError } = await supabase.from('invoices').update(invoicePayload).eq('id', updateExistingId);
+               if (updateError) throw new Error(`עדכון החשבונית במסד הנתונים נכשל: ${updateError.message}`);
                GmailSyncTracker.log('success', `[${msgIndexStr}] שודרג בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${ocrResult.total_amount || 0})`);
             } else {
-               await supabase.from('invoices').insert(invoicePayload);
+               const { error: insertError } = await supabase.from('invoices').insert(invoicePayload);
+               if (insertError) throw new Error(`שמירת החשבונית במסד הנתונים נכשלה: ${insertError.message}`);
                GmailSyncTracker.log('success', `[${msgIndexStr}] נקלט בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${ocrResult.total_amount || 0})`);
             }
             
@@ -358,9 +432,15 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
           }
         }
         
+        // A retried message succeeded → remove it from the retry queue.
+        if (isRetry) {
+          await supabase.from(FAILED_TABLE).delete().eq('message_id', msgRef.id);
+          GmailSyncTracker.log('success', `[${msgIndexStr}] ההודעה "${subjectHeader.slice(0, 45)}" עובדה בהצלחה בניסיון חוזר.`);
+        }
+
         // INCREMENTAL CHECKPOINT UPDATE:
-        // Update DB checkpoint after EACH processed message so progress is never lost or repeated!
-        if (internalDate > newestMessageDate) {
+        // Update DB checkpoint after EACH processed message so a timeout doesn't lose progress.
+        if (!checkpointFrozen && internalDate > newestMessageDate) {
           newestMessageDate = internalDate;
           await supabase
             .from('gmail_sync_config')
@@ -371,30 +451,54 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
             .eq('id', config.id);
         }
       } catch (msgErr: any) {
+        failedCount++;
+        const errText = String(msgErr?.message || msgErr).slice(0, 1000);
         console.error(`[Gmail Sync] Error processing message ${msgRef.id}:`, msgErr);
-        GmailSyncTracker.log('error', `[${msgIndexStr}] שגיאה בעיבוד הודעה: ${msgErr.message || msgErr}`);
+        GmailSyncTracker.log('error', `[${msgIndexStr}] שגיאה בעיבוד הודעה${subjectForLog ? ` "${subjectForLog.slice(0, 45)}"` : ''}: ${errText}`);
+
+        // Queue the message for retry so moving the checkpoint past it doesn't lose it.
+        const attempts = (msgRef.retryAttempts ?? 0) + 1;
+        let queued = false;
+        if (failedTableAvailable) {
+          const { error: upsertErr } = await supabase
+            .from(FAILED_TABLE)
+            .upsert({
+              message_id: msgRef.id,
+              subject: subjectForLog,
+              attempts,
+              last_error: errText,
+              last_attempt_at: new Date().toISOString()
+            }, { onConflict: 'message_id' });
+          queued = !upsertErr;
+          if (upsertErr) console.error('[Gmail Sync] Could not record failed message:', upsertErr);
+        }
+
+        if (queued) {
+          if (attempts >= MAX_FAILED_ATTEMPTS) {
+            GmailSyncTracker.log('error', `[${msgIndexStr}] ההודעה נכשלה ${attempts} פעמים ולא תנוסה שוב אוטומטית. היא שמורה בטבלה ${FAILED_TABLE} לבדיקה ידנית.`);
+          } else {
+            GmailSyncTracker.log('warn', `[${msgIndexStr}] ההודעה תנוסה שוב בסריקה הבאה (ניסיון ${attempts}/${MAX_FAILED_ATTEMPTS}).`);
+          }
+        } else if (!isRetry && !checkpointFrozen) {
+          checkpointFrozen = true;
+          GmailSyncTracker.log('warn', `[${msgIndexStr}] לא ניתן לשמור את ההודעה לניסיון חוזר - נקודת הסריקה לא תתקדם מעבר לה, כדי שתיסרק שוב בהרצה הבאה.`);
+        }
       }
     }
-    
-    // Final checkpoint update to the newest date or scan start time
-    const finalSyncDate = messages.length > 0 && newestMessageDate > (config.last_sync_at ? new Date(config.last_sync_at) : new Date(0))
-      ? newestMessageDate.toISOString()
-      : scanStartTime.toISOString();
 
-    await supabase
-      .from('gmail_sync_config')
-      .update({
-        last_sync_at: finalSyncDate,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', config.id);
+    if (failedCount > 0) {
+      GmailSyncTracker.log('warn', `${failedCount} הודעות נכשלו בעיבוד בהרצה זו.`);
+    }
 
-    await GmailSyncTracker.completeRun(processedCount);
+    await GmailSyncTracker.completeRun(processedCount, { remainingMessages });
 
-    return { 
-      success: true, 
-      count: processedCount, 
-      last_sync_at: finalSyncDate,
+    return {
+      success: true,
+      count: processedCount,
+      failed: failedCount,
+      remaining: remainingMessages,
+      hasMore: remainingMessages > 0,
+      last_sync_at: newestMessageDate.toISOString(),
       runId: runId
     };
   } catch (error: any) {

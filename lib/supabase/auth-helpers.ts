@@ -63,7 +63,9 @@ export async function updateSession(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   
   // Whitelist exact API paths for external webhooks
-  const isWebhook = request.nextUrl.pathname === '/api/import/gmail/webhook' || 
+  // The cron route has no user session; it authenticates itself with CRON_SECRET.
+  const isWebhook = request.nextUrl.pathname === '/api/import/gmail/webhook' ||
+                    request.nextUrl.pathname === '/api/import/gmail/cron' ||
                     request.nextUrl.pathname === '/api/import/gmail/auth/callback' ||
                     request.nextUrl.pathname === '/api/import/gmail/config' || // we might need this protected actually, but it's okay for now
                     request.nextUrl.pathname.startsWith('/api/webhooks/telegram');

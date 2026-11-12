@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { syncGmailInvoices } from '@/lib/gmail/sync';
 import { GmailSyncTracker } from '@/lib/gmail/tracker';
 
-// Allow up to 60 seconds of execution in Vercel Serverless
-export const maxDuration = 60;
+// Must stay above TIME_BUDGET_MS in lib/gmail/sync.ts (requires Vercel Fluid Compute, on by default).
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {

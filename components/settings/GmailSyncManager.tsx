@@ -167,6 +167,10 @@ export default function GmailSyncManager() {
       if (res.ok) {
         if (data.alreadyRunning) {
           setMessage('סריקה כבר מתבצעת כעת ברקע...');
+        } else if (data.hasMore) {
+          setMessage(`נקלטו ${data.count ?? 0} חשבוניות. הסריקה נעצרה בגלל מגבלת זמן ונותרו ${data.remaining} הודעות - לחצו שוב על סריקה כדי להמשיך.`);
+        } else if (data.failed) {
+          setMessage(`הסריקה הסתיימה. נקלטו ${data.count ?? 0} חשבוניות חדשות, ${data.failed} הודעות נכשלו ויתנסו שוב בסריקה הבאה (פירוט ביומן).`);
         } else {
           setMessage(`הסריקה הסתיימה בהצלחה! נקלטו ${data.count ?? 0} חשבוניות חדשות.`);
         }
@@ -546,7 +550,7 @@ export default function GmailSyncManager() {
 
                   <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'rgba(15, 23, 42, 0.6)', borderBottom: '1px solid #1e293b', fontSize: 'var(--font-size-xs)', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
                     <span>
-                      סטטוס: <strong style={{ color: activeRun.status === 'running' ? '#fbbf24' : activeRun.status === 'completed' ? '#4ade80' : '#f87171' }}>{activeRun.status}</strong>
+                      סטטוס: <strong style={{ color: activeRun.status === 'running' || activeRun.status === 'partial' ? '#fbbf24' : activeRun.status === 'completed' ? '#4ade80' : '#f87171' }}>{activeRun.status}</strong>
                     </span>
                     <span>הודעות: <strong style={{ color: '#ffffff' }}>{activeRun.processed_messages}/{activeRun.total_messages}</strong></span>
                   </div>
