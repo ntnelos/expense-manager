@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
+import { autoMatchOnArrival } from '@/lib/matching/auto';
 
 function hashString(str: string) {
   return crypto.createHash('sha256').update(str).digest('hex');
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
     let errors = 0;
     let ignored = 0;
     const skippedLines: any[] = [];
+    const insertedIds: string[] = [];
 
     // Fetch ignored expense rules
     const { data: ignoredData } = await supabase.from('ignored_expense_rules').select('description_pattern');
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
       const contentHashStr = `${date}|${amount}|${desc}`;
       const content_hash = hashString(contentHashStr);
 
-      const { error } = await supabase.from('expense_lines').insert({
+      const { data: insertedRow, error } = await supabase.from('expense_lines').insert({
         transaction_date: date,
         charge_date: line.charge_date ? line.charge_date.substring(0, 10) : null,
         amount: Number(line.amount),
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
         source_file: sourceFile,
         content_hash,
         status: 'unapproved', // Default
-      });
+      }).select('id').single();
 
       if (error) {
         if (error.code === '23505') { // Unique constraint violation (content_hash)
@@ -76,11 +78,16 @@ export async function POST(req: Request) {
         }
       } else {
         inserted++;
+        if (insertedRow?.id) insertedIds.push(insertedRow.id);
       }
     }
 
+    // Match the new card lines to open invoices right away (high-confidence only; the rest are arena proposals)
+    const autoMatched = await autoMatchOnArrival(supabase, { lineIds: insertedIds });
+
     return NextResponse.json({
       success: true,
+      autoMatched: autoMatched.length,
       inserted,
       duplicates,
       errors,

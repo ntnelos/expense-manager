@@ -5,6 +5,7 @@ import { extractInvoiceFromPDF, extractInvoiceFromImage } from '../ocr/extract';
 import { generateSHA256Hash } from '../utils/hash';
 import { applySupplierAlias } from '../utils/alias';
 import { normalizeOcrAmounts } from '../ocr/normalize';
+import { autoMatchOnArrival } from '../matching/auto';
 import { GmailSyncTracker } from './tracker';
 
 // Route handlers calling this run with maxDuration = 300s. Stop picking up new messages after this
@@ -170,6 +171,7 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
 
     let processedCount = 0;
     let failedCount = 0;
+    const savedInvoiceIds: string[] = []; // auto-matched to card lines at the end of the run
     let remainingMessages = 0;
     // Once true, the checkpoint stays put for the rest of the run: a message failed and could not be
     // queued for retry, so moving past it would lose it.
@@ -429,10 +431,12 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
             if (updateExistingId) {
                const { error: updateError } = await supabase.from('invoices').update(invoicePayload).eq('id', updateExistingId);
                if (updateError) throw new Error(`עדכון החשבונית במסד הנתונים נכשל: ${updateError.message}`);
+               savedInvoiceIds.push(updateExistingId);
                GmailSyncTracker.log('success', `[${msgIndexStr}] שודרג בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${amounts.totalAmount || 0})`);
             } else {
-               const { error: insertError } = await supabase.from('invoices').insert(invoicePayload);
+               const { data: insertedInvoice, error: insertError } = await supabase.from('invoices').insert(invoicePayload).select('id').single();
                if (insertError) throw new Error(`שמירת החשבונית במסד הנתונים נכשלה: ${insertError.message}`);
+               if (insertedInvoice?.id) savedInvoiceIds.push(insertedInvoice.id);
                GmailSyncTracker.log('success', `[${msgIndexStr}] נקלט בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${amounts.totalAmount || 0})`);
             }
             
@@ -496,6 +500,14 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
 
     if (failedCount > 0) {
       GmailSyncTracker.log('warn', `${failedCount} הודעות נכשלו בעיבוד בהרצה זו.`);
+    }
+
+    if (savedInvoiceIds.length > 0) {
+      const autoMatched = await autoMatchOnArrival(supabase, { invoiceIds: savedInvoiceIds });
+      for (const m of autoMatched) {
+        GmailSyncTracker.log('success', `🔗 הותאמה אוטומטית: ${m.supplierName || 'חשבונית'} ← "${m.lineDescription}" (₪${m.lineAmount})`);
+      }
+      GmailSyncTracker.log('info', `התאמה אוטומטית: ${autoMatched.length} מתוך ${savedInvoiceIds.length} חשבוניות חדשות הותאמו לחיובי כרטיס. השאר ממתינות בזירת ההתאמות.`);
     }
 
     await GmailSyncTracker.completeRun(processedCount, { remainingMessages });

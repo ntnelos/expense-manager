@@ -6,6 +6,7 @@ import { generateSHA256Hash } from '@/lib/utils/hash';
 import { applySupplierAlias } from '@/lib/utils/alias';
 import { normalizeOcrAmounts } from '@/lib/ocr/normalize';
 import { DUPLICATE_INVOICE_FIELDS } from '@/lib/invoices/duplicates';
+import { autoMatchOnArrival } from '@/lib/matching/auto';
 
 export async function POST(request: Request) {
   let uploadedFileId: string | null = null;
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     const source = (formData.get('source') as string) || 'manual_upload';
     // Set when the user confirmed "this is not a duplicate" after a same-invoice-number warning.
     const forceUpload = formData.get('force_upload') === 'true';
+    const skipAutoMatch = formData.get('skip_auto_match') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -215,11 +217,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Match to an open card line right away when confidence is high. Skipped when the caller matches
+    // the invoice to a specific line itself (direct upload from the matching arena).
+    const [autoMatch] = hasOcrError || skipAutoMatch
+      ? []
+      : await autoMatchOnArrival(supabase, { invoiceIds: [newInvoice.id] });
+
     return NextResponse.json({
       success: true,
       message: hasOcrError ? 'Invoice saved with missing details (OCR failed).' : 'Invoice uploaded successfully',
       invoice: newInvoice,
-      isUnidentified: hasOcrError
+      isUnidentified: hasOcrError,
+      autoMatch: autoMatch || null,
     });
   } catch (error: any) {
     console.error('Invoice upload/processing error:', error);

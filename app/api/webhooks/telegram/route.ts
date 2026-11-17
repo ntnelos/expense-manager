@@ -5,6 +5,7 @@ import { extractInvoiceFromImage, extractInvoiceFromPDF, parseInvoiceCorrection 
 import { generateSHA256Hash } from '@/lib/utils/hash';
 import { applySupplierAlias } from '@/lib/utils/alias';
 import { normalizeOcrAmounts } from '@/lib/ocr/normalize';
+import { autoMatchOnArrival } from '@/lib/matching/auto';
 import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 
 export async function POST(req: Request) {
@@ -320,11 +321,16 @@ export async function POST(req: Request) {
 
     // 10. Send Success Message
     console.log('[Telegram] Step 10: Success! Invoice ID:', newInvoice?.id);
+    // Match to an open card line right away when confidence is high
+    const [autoMatch] = newInvoice?.id ? await autoMatchOnArrival(supabase, { invoiceIds: [newInvoice.id] }) : [];
+    const matchLine = autoMatch
+      ? `🔗 הותאמה אוטומטית לחיוב "${autoMatch.lineDescription}" (₪${autoMatch.lineAmount}, ${autoMatch.lineDate ? new Date(autoMatch.lineDate).toLocaleDateString('he-IL') : ''}).\nאם זה לא נכון - אפשר לבטל בזירת ההתאמות.`
+      : `החשבונית ממתינה להתאמה במערכת.`;
     const summary = `✅ החשבונית נקלטה בהצלחה!\n\n` +
       `🏢 ספק: ${ocrResult.supplier_name || 'לא זוהה'}\n` +
       `💰 סכום: ${amounts.totalAmount ? '₪' + amounts.totalAmount : 'לא זוהה'}${amounts.originalAmount !== null ? ` (${amounts.originalAmount} ${amounts.currency})` : ''}\n` +
       `📁 קטגוריה: ${categoryName || 'לא זוהה'}\n\n` +
-      `החשבונית ממתינה להתאמה במערכת.`;
+      matchLine;
       
     await sendMessage(chatId, summary);
 

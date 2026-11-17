@@ -10,6 +10,8 @@ import ApproveNoExpenseModal from '../invoices/ApproveNoExpenseModal';
 import DirectUploadModal from '../invoices/DirectUploadModal';
 import DeleteExpenseModal from '../expense-lines/DeleteExpenseModal';
 import NoteModal from '../expense-lines/NoteModal';
+import type { MatchProposal } from '@/lib/matching/engine';
+import { lineTargetAmount } from '@/lib/matching/engine';
 
 function formatCurrency(amount: number | null, currency: string = 'ILS'): string {
   if (amount === null || amount === undefined) return '—';
@@ -77,6 +79,7 @@ export default function MatchingArena() {
 
   // Auto-Match modal state
   const [showAutoMatch, setShowAutoMatch] = useState(false);
+  const [autoMatchProposals, setAutoMatchProposals] = useState<MatchProposal<Invoice, ExpenseLine>[]>([]);
 
   // Approve without invoice state
   const [approvingLine, setApprovingLine] = useState<ExpenseLine | null>(null);
@@ -110,6 +113,10 @@ export default function MatchingArena() {
 
       if (invRes.ok) setInvoices(invData.invoices || []);
       if (expRes.ok) setExpenseLines(expData.expenseLines || []);
+
+      // Proposals are computed on the server over all months, not only the month on screen.
+      const propRes = await fetch('/api/matching/proposals');
+      if (propRes.ok) setAutoMatchProposals((await propRes.json()).proposals || []);
     } catch (err) {
       console.error('Failed to fetch data for matching arena', err);
     } finally {
@@ -185,6 +192,20 @@ export default function MatchingArena() {
 
   const handleManualMatch = async (line: ExpenseLine) => {
     if (selectedInvoices.length === 0) return;
+
+    // Guard against invoices left selected from earlier: several invoices whose total doesn't fit this charge.
+    if (selectedInvoices.length > 1) {
+      const sum = selectedInvoices.reduce((t, inv) => t + (inv.total_amount || 0), 0);
+      const target = lineTargetAmount(line as any);
+      if (Math.abs(sum - target) > Math.max(1, Math.abs(target) * 0.02)) {
+        const list = selectedInvoices.map(inv => `• ${inv.supplier_name || 'ספק לא ידוע'} — ${formatCurrency(inv.total_amount)}`).join('\n');
+        const ok = window.confirm(
+          `שימו לב: ${selectedInvoices.length} חשבוניות מסומנות, וסכומן (${formatCurrency(sum)}) שונה מסכום החיוב (${formatCurrency(target)}).\n\n${list}\n\nלהתאים את כולן לחיוב "${line.description}"?`
+        );
+        if (!ok) return;
+      }
+    }
+
     setMatchingLineId(line.id);
     try {
       for (const inv of selectedInvoices) {
@@ -199,12 +220,14 @@ export default function MatchingArena() {
     }
   };
 
-  const handleAutoMatchConfirm = async (proposals: any[]) => {
+  const handleAutoMatchConfirm = async (proposals: MatchProposal<Invoice, ExpenseLine>[]) => {
     for (const p of proposals) {
-      try {
-        await handleMatch(p.invoice.id, p.line.id, p.invoice.total_amount || p.line.amount, p.score >= 100 ? 'auto_exact' : 'auto_tolerance', true);
-      } catch (err: any) {
-        console.error('Auto match failed for', p, err);
+      for (const inv of p.invoices) {
+        try {
+          await handleMatch(inv.id, p.line.id, inv.total_amount || p.line.amount, p.confidence === 'high' ? 'auto_exact' : 'auto_tolerance', true);
+        } catch (err: any) {
+          console.error('Auto match failed for', inv.id, p.line.id, err);
+        }
       }
     }
     fetchUnmatchedData(true);
@@ -332,36 +355,6 @@ export default function MatchingArena() {
     }
   };
 
-  // Generate Auto-Match Proposals (Score >= 70)
-  const autoMatchProposals = useMemo(() => {
-    const proposals: any[] = [];
-    const usedLines = new Set();
-    const usedInvoices = new Set();
-
-    for (const inv of invoices) {
-      if (usedInvoices.has(inv.id)) continue;
-
-      let bestLine = null;
-      let bestScore = -1;
-
-      for (const line of expenseLines) {
-        if (line.status === 'approved' || line.status === 'approved_no_invoice') continue;
-        if (usedLines.has(line.id)) continue;
-        const score = getMatchScore([inv], line);
-        if (score >= 70 && score > bestScore) {
-          bestScore = score;
-          bestLine = line;
-        }
-      }
-
-      if (bestLine) {
-        proposals.push({ invoice: inv, line: bestLine, score: bestScore, selected: true });
-        usedLines.add(bestLine.id);
-        usedInvoices.add(inv.id);
-      }
-    }
-    return proposals;
-  }, [invoices, expenseLines]);
 
   // Sorting functions
   const sortData = (data: any[], sort: { field: SortField, dir: SortDirection }, type: 'invoice' | 'line') => {

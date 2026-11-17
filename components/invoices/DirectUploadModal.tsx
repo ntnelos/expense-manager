@@ -30,6 +30,7 @@ export default function DirectUploadModal({ isOpen, onClose, expenseLine, onUplo
           
           <FileUploader 
             source="manual_upload"
+            skipAutoMatch
             onUploadSuccess={(invoice) => {
               // Wait for the modal to close or show progress, but we can just call it
               onUploadSuccess(invoice, expenseLine.id);

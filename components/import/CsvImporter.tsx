@@ -64,7 +64,7 @@ export default function CsvImporter() {
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ inserted: number, duplicates: number, errors: number, skippedLines?: any[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ inserted: number, duplicates: number, errors: number, autoMatched?: number, skippedLines?: any[] } | null>(null);
 
   // Card charge dates (saved day-of-month per card)
   const [cardChargeDates, setCardChargeDates] = useState<{card_last_digits: string, charge_day: number}[]>([]);
@@ -699,6 +699,10 @@ export default function CsvImporter() {
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', fontWeight: 700, color: importResult?.errors ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{importResult?.errors}</div>
             <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>שגיאות</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: importResult?.autoMatched ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>{importResult?.autoMatched ?? 0}</div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>הותאמו אוטומטית</div>
           </div>
         </div>
 

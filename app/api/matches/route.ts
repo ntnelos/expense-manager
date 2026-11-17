@@ -1,39 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { moveInvoiceDriveStatus } from '@/lib/google/drive';
-
-// Helper to fix trigger issues with negative amounts (credit notes)
-async function recalculateInvoiceStatus(supabase: any, invoiceId: string) {
-  const { data: invoice } = await supabase
-    .from('invoices')
-    .select('id, total_amount, matched_amount, status, drive_file_id, invoice_date')
-    .eq('id', invoiceId)
-    .single();
-
-  if (!invoice) return null;
-
-  let newStatus = 'new';
-  const v_matched = invoice.matched_amount || 0;
-  const v_invoice_total = invoice.total_amount || 0;
-
-  if (v_matched === 0) {
-    newStatus = 'new';
-  } else if (Math.abs(v_matched) >= Math.abs(v_invoice_total)) {
-    newStatus = 'fully_matched';
-  } else {
-    newStatus = 'partially_matched';
-  }
-
-  if (newStatus !== invoice.status) {
-    await supabase
-      .from('invoices')
-      .update({ status: newStatus })
-      .eq('id', invoiceId);
-    invoice.status = newStatus;
-  }
-  
-  return invoice;
-}
+import { createMatch, recalculateInvoiceStatus } from '@/lib/matching/persist';
 
 export async function GET(req: Request) {
   try {
@@ -71,37 +39,21 @@ export async function POST(req: Request) {
 
     const supabase = createServerClient();
 
-    // The database has triggers that will automatically update the status of the invoice and expense_line
-    // when a match is inserted. See 001_initial_schema.sql for the trigger definitions.
-    const { data, error } = await supabase
-      .from('matches')
-      .insert({
-        invoice_id,
-        expense_line_id,
-        matched_amount,
-        match_type: match_type || 'manual',
-        matched_by: 'system', // Ideally we'd use the user ID if auth was set up
-        notes,
-      })
-      .select()
-      .single();
+    // DB triggers update invoice / expense_line statuses; createMatch also fixes credit-note status and moves the file.
+    const { match, error } = await createMatch(supabase, {
+      invoice_id,
+      expense_line_id,
+      matched_amount,
+      match_type: match_type || 'manual',
+      matched_by: 'system', // Ideally we'd use the user ID if auth was set up
+      notes,
+    });
 
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'This expense line is already matched' }, { status: 409 });
-      }
-      throw error;
+    if (error === 'duplicate') {
+      return NextResponse.json({ error: 'This expense line is already matched' }, { status: 409 });
     }
 
-    // Fix DB trigger bug for negative amounts and move file
-    const invoice = await recalculateInvoiceStatus(supabase, invoice_id);
-      
-    if (invoice?.drive_file_id && invoice.status !== 'new') {
-      const dateToUse = invoice.invoice_date ? new Date(invoice.invoice_date) : new Date();
-      moveInvoiceDriveStatus(invoice.drive_file_id, dateToUse, 'matched').catch(console.error);
-    }
-
-    return NextResponse.json({ success: true, match: data });
+    return NextResponse.json({ success: true, match });
   } catch (err: any) {
     console.error('POST match error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

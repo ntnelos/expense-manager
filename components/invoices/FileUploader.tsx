@@ -8,6 +8,8 @@ interface FileUploaderProps {
   onUploadSuccess?: (invoice: any) => void;
   onAllComplete?: () => void;
   source?: 'manual_upload' | 'email' | 'telegram';
+  /** Don't auto-match on the server: the caller matches the invoice to a specific line itself. */
+  skipAutoMatch?: boolean;
 }
 
 type FileItemStatus = 'queued' | 'hashing' | 'checking_dup' | 'uploading' | 'success' | 'error' | 'duplicate' | 'credit_note';
@@ -111,7 +113,7 @@ function DuplicateDetails({ duplicate }: { duplicate: DuplicateInfo }) {
   );
 }
 
-export default function FileUploader({ onUploadSuccess, onAllComplete, source = 'manual_upload' }: FileUploaderProps) {
+export default function FileUploader({ onUploadSuccess, onAllComplete, source = 'manual_upload', skipAutoMatch = false }: FileUploaderProps) {
   const [queue, setQueue] = useState<FileItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -260,6 +262,7 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
       formData.append('file', item.file);
       formData.append('source', source);
       if (options.force) formData.append('force_upload', 'true');
+      if (skipAutoMatch) formData.append('skip_auto_match', 'true');
 
       const response = await fetch('/api/invoices/upload', {
         method: 'POST',
@@ -294,7 +297,11 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
       } else {
         updateItem(item.id, {
           status: 'success',
-          message: `✅ ${responseData.invoice?.supplier_name || 'הועלה בהצלחה'}`,
+          message: `✅ ${responseData.invoice?.supplier_name || 'הועלה בהצלחה'}${
+            responseData.autoMatch
+              ? ` · 🔗 הותאמה אוטומטית ל"${responseData.autoMatch.lineDescription}" (₪${responseData.autoMatch.lineAmount}, ${formatDate(responseData.autoMatch.lineDate)})`
+              : ''
+          }`,
           invoice: responseData.invoice,
         });
         onUploadSuccess?.(responseData.invoice);
