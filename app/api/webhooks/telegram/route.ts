@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase/server';
 import { getFile, downloadFile, sendMessage } from '@/lib/telegram/bot';
 import { extractInvoiceFromImage, extractInvoiceFromPDF, parseInvoiceCorrection } from '@/lib/ocr/extract';
 import { generateSHA256Hash } from '@/lib/utils/hash';
+import { applySupplierAlias } from '@/lib/utils/alias';
+import { normalizeOcrAmounts } from '@/lib/ocr/normalize';
 import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 
 export async function POST(req: Request) {
@@ -198,10 +200,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // Handle credit notes (make amounts negative)
-    if (ocrResult.is_credit_note) {
-      if (ocrResult.total_amount !== null) ocrResult.total_amount = -Math.abs(ocrResult.total_amount);
-      if (ocrResult.vat_amount !== null) ocrResult.vat_amount = -Math.abs(ocrResult.vat_amount);
+    // Same supplier alias translation as manual upload and Gmail
+    if (ocrResult.supplier_name) {
+      ocrResult.supplier_name = await applySupplierAlias(ocrResult.supplier_name);
+    }
+
+    // Foreign currency → ILS, credit notes negative (shared with the other intake paths)
+    const amounts = await normalizeOcrAmounts(ocrResult);
+    if (ocrResult.is_credit_note && ocrResult.vat_amount !== null) {
+      ocrResult.vat_amount = -Math.abs(ocrResult.vat_amount);
     }
 
     // 6.5 Semantic Duplicate Check
@@ -213,7 +220,7 @@ export async function POST(req: Request) {
         .eq('invoice_number', ocrResult.invoice_number);
 
       if (semanticDuplicates && semanticDuplicates.length > 0) {
-        const newSign = (ocrResult.total_amount || 0) < 0 ? -1 : 1;
+        const newSign = (amounts.totalAmount || 0) < 0 ? -1 : 1;
         const isDuplicate = semanticDuplicates.some(dup => {
           const dupSign = (dup.total_amount || 0) < 0 ? -1 : 1;
           return newSign === dupSign;
@@ -291,8 +298,11 @@ export async function POST(req: Request) {
         source: 'telegram',
         supplier_name: ocrResult.supplier_name,
         supplier_tax_id: ocrResult.supplier_tax_id,
+        invoice_number: ocrResult.invoice_number,
         invoice_date: ocrResult.invoice_date,
-        total_amount: ocrResult.total_amount,
+        currency: amounts.currency,
+        original_amount: amounts.originalAmount,
+        total_amount: amounts.totalAmount,
         vat_amount: ocrResult.vat_amount,
         document_type: ocrResult.document_type,
         category_id: categoryId,
@@ -312,7 +322,7 @@ export async function POST(req: Request) {
     console.log('[Telegram] Step 10: Success! Invoice ID:', newInvoice?.id);
     const summary = `✅ החשבונית נקלטה בהצלחה!\n\n` +
       `🏢 ספק: ${ocrResult.supplier_name || 'לא זוהה'}\n` +
-      `💰 סכום: ${ocrResult.total_amount ? '₪' + ocrResult.total_amount : 'לא זוהה'}\n` +
+      `💰 סכום: ${amounts.totalAmount ? '₪' + amounts.totalAmount : 'לא זוהה'}${amounts.originalAmount !== null ? ` (${amounts.originalAmount} ${amounts.currency})` : ''}\n` +
       `📁 קטגוריה: ${categoryName || 'לא זוהה'}\n\n` +
       `החשבונית ממתינה להתאמה במערכת.`;
       

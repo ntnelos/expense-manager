@@ -4,6 +4,8 @@ import { uploadToGoogleDrive, deleteFromGoogleDrive } from '@/lib/google/drive';
 import { extractInvoiceFromImage, extractInvoiceFromPDF } from '@/lib/ocr/extract';
 import { generateSHA256Hash } from '@/lib/utils/hash';
 import { applySupplierAlias } from '@/lib/utils/alias';
+import { normalizeOcrAmounts } from '@/lib/ocr/normalize';
+import { DUPLICATE_INVOICE_FIELDS } from '@/lib/invoices/duplicates';
 
 export async function POST(request: Request) {
   let uploadedFileId: string | null = null;
@@ -12,6 +14,8 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const source = (formData.get('source') as string) || 'manual_upload';
+    // Set when the user confirmed "this is not a duplicate" after a same-invoice-number warning.
+    const forceUpload = formData.get('force_upload') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -27,7 +31,7 @@ export async function POST(request: Request) {
     // 2. Check for duplicate content_hash in DB
     const { data: existingInvoice, error: checkError } = await supabase
       .from('invoices')
-      .select('id, supplier_name, total_amount, invoice_date, drive_file_url')
+      .select(DUPLICATE_INVOICE_FIELDS)
       .eq('content_hash', contentHash)
       .maybeSingle();
 
@@ -35,11 +39,13 @@ export async function POST(request: Request) {
       console.error('Error checking duplicate invoice in DB:', checkError);
     }
 
+    // An identical file can't be uploaded twice (content_hash is UNIQUE), so force_upload doesn't apply here.
     if (existingInvoice) {
       return NextResponse.json(
         {
           error: 'Duplicate file detected.',
           code: 'DUPLICATE_INVOICE',
+          duplicate_type: 'identical_file',
           invoice: existingInvoice,
         },
         { status: 409 }
@@ -86,41 +92,12 @@ export async function POST(request: Request) {
       ocrResult.supplier_name = await applySupplierAlias(ocrResult.supplier_name);
     }
 
-    // 3.5 Handle Foreign Currency Conversion
-    let finalTotalAmount = ocrResult.total_amount;
-    let originalAmount = null;
-    let invoiceCurrency = ocrResult.currency || 'ILS';
-    
-    if (invoiceCurrency !== 'ILS' && ocrResult.total_amount && ocrResult.invoice_date) {
-      try {
-        const response = await fetch(`https://api.frankfurter.dev/v1/${ocrResult.invoice_date}?base=${invoiceCurrency}&symbols=ILS`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.rates && data.rates.ILS) {
-            originalAmount = ocrResult.total_amount;
-            finalTotalAmount = Math.round(originalAmount * data.rates.ILS * 100) / 100;
-          }
-        } else {
-          // Fallback to latest if historical fails
-          const latestResponse = await fetch(`https://api.frankfurter.dev/v1/latest?base=${invoiceCurrency}&symbols=ILS`);
-          if (latestResponse.ok) {
-            const data = await latestResponse.json();
-            if (data.rates && data.rates.ILS) {
-              originalAmount = ocrResult.total_amount;
-              finalTotalAmount = Math.round(originalAmount * data.rates.ILS * 100) / 100;
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch exchange rate:', err);
-      }
-    }
-
-    // 4. Handle credit notes (make amounts negative)
-    if (!hasOcrError && ocrResult.is_credit_note) {
-      if (finalTotalAmount !== null) finalTotalAmount = -Math.abs(finalTotalAmount);
-      if (originalAmount !== null) originalAmount = -Math.abs(originalAmount);
-    }
+    // 3.5 + 4. Foreign currency conversion and credit-note sign
+    const {
+      currency: invoiceCurrency,
+      totalAmount: finalTotalAmount,
+      originalAmount,
+    } = await normalizeOcrAmounts(ocrResult);
     // 5. Upload file to Google Drive with smart renaming
     const extension = file.name.split('.').pop() || 'pdf';
     const supplier = hasOcrError ? 'Unidentified' : (ocrResult.supplier_name ? ocrResult.supplier_name.replace(/[/\\?%*:|"<>]/g, '') : 'Unknown');
@@ -168,27 +145,35 @@ export async function POST(request: Request) {
     }
 
     // 5.8 Semantic Duplicate Check (By Supplier + Invoice Number)
-    if (!hasOcrError && ocrResult.supplier_name && ocrResult.invoice_number) {
+    if (!forceUpload && !hasOcrError && ocrResult.supplier_name && ocrResult.invoice_number) {
       const { data: semanticDuplicates } = await supabase
         .from('invoices')
-        .select('id, supplier_name, invoice_number, invoice_date, total_amount')
+        .select(DUPLICATE_INVOICE_FIELDS)
         .eq('supplier_name', ocrResult.supplier_name)
         .eq('invoice_number', ocrResult.invoice_number);
 
       if (semanticDuplicates && semanticDuplicates.length > 0) {
         const newSign = (finalTotalAmount || 0) < 0 ? -1 : 1;
-        const isDuplicate = semanticDuplicates.some(dup => {
+        const matchingDuplicate = semanticDuplicates.find(dup => {
           const dupSign = (dup.total_amount || 0) < 0 ? -1 : 1;
           return newSign === dupSign;
         });
 
-        if (isDuplicate) {
+        if (matchingDuplicate) {
           if (uploadedFileId) await deleteFromGoogleDrive(uploadedFileId);
           return NextResponse.json(
             {
               error: 'Duplicate invoice detected (same supplier and invoice number).',
               code: 'DUPLICATE_INVOICE',
-              invoice: semanticDuplicates[0],
+              duplicate_type: 'same_invoice_number',
+              invoice: matchingDuplicate,
+              // What OCR read from the new file, so the user can compare before choosing "not a duplicate".
+              extracted: {
+                supplier_name: ocrResult.supplier_name,
+                invoice_number: ocrResult.invoice_number,
+                invoice_date: ocrResult.invoice_date,
+                total_amount: finalTotalAmount,
+              },
             },
             { status: 409 }
           );

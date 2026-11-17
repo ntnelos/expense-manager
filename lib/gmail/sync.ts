@@ -4,6 +4,7 @@ import { uploadToGoogleDrive } from '../google/drive';
 import { extractInvoiceFromPDF, extractInvoiceFromImage } from '../ocr/extract';
 import { generateSHA256Hash } from '../utils/hash';
 import { applySupplierAlias } from '../utils/alias';
+import { normalizeOcrAmounts } from '../ocr/normalize';
 import { GmailSyncTracker } from './tracker';
 
 // Route handlers calling this run with maxDuration = 300s. Stop picking up new messages after this
@@ -320,17 +321,21 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
               GmailSyncTracker.log('warn', `[${msgIndexStr}] המסמך ${filename} סווג כ-'other' (לא חשבונית/קבלה) - מדלג.`);
               continue;
             }
-            
+
+            // Foreign currency → ILS, credit notes negative (shared with the other intake paths).
+            // Stored total_amount is in ILS, so dedupe compares against the converted amount.
+            const amounts = await normalizeOcrAmounts(ocrResult);
+
             // 3. Deduplication and Document Hierarchy Logic
             let skip = false;
             let updateExistingId = null;
-            
-            if (ocrResult.invoice_date && ocrResult.total_amount !== null) {
+
+            if (ocrResult.invoice_date && amounts.totalAmount !== null) {
               let dupQuery = supabase
                 .from('invoices')
                 .select('id, document_type')
                 .eq('invoice_date', ocrResult.invoice_date)
-                .eq('total_amount', ocrResult.total_amount);
+                .eq('total_amount', amounts.totalAmount);
                 
               if (ocrResult.supplier_tax_id) {
                  dupQuery = dupQuery.eq('supplier_tax_id', ocrResult.supplier_tax_id);
@@ -409,8 +414,11 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
               source: 'email',
               supplier_name: ocrResult.supplier_name,
               supplier_tax_id: ocrResult.supplier_tax_id,
+              invoice_number: ocrResult.invoice_number,
               invoice_date: ocrResult.invoice_date,
-              total_amount: ocrResult.total_amount,
+              currency: amounts.currency,
+              original_amount: amounts.originalAmount,
+              total_amount: amounts.totalAmount,
               vat_amount: ocrResult.vat_amount,
               document_type: ocrResult.document_type,
               category_id: categoryId,
@@ -421,11 +429,11 @@ export async function syncGmailInvoices(options: { triggerType?: 'manual' | 'cro
             if (updateExistingId) {
                const { error: updateError } = await supabase.from('invoices').update(invoicePayload).eq('id', updateExistingId);
                if (updateError) throw new Error(`עדכון החשבונית במסד הנתונים נכשל: ${updateError.message}`);
-               GmailSyncTracker.log('success', `[${msgIndexStr}] שודרג בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${ocrResult.total_amount || 0})`);
+               GmailSyncTracker.log('success', `[${msgIndexStr}] שודרג בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${amounts.totalAmount || 0})`);
             } else {
                const { error: insertError } = await supabase.from('invoices').insert(invoicePayload);
                if (insertError) throw new Error(`שמירת החשבונית במסד הנתונים נכשלה: ${insertError.message}`);
-               GmailSyncTracker.log('success', `[${msgIndexStr}] נקלט בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${ocrResult.total_amount || 0})`);
+               GmailSyncTracker.log('success', `[${msgIndexStr}] נקלט בהצלחה: ${ocrResult.supplier_name || filename} (סכום: ₪${amounts.totalAmount || 0})`);
             }
             
             processedCount++;

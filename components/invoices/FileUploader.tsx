@@ -2,6 +2,7 @@
 
 import { useState, useRef, DragEvent, ChangeEvent } from 'react';
 import { computeFileHash } from '@/lib/utils/client-hash';
+import type { DuplicateInfo } from '@/lib/invoices/duplicates';
 
 interface FileUploaderProps {
   onUploadSuccess?: (invoice: any) => void;
@@ -17,9 +18,98 @@ interface FileItem {
   status: FileItemStatus;
   message: string;
   invoice?: any;
+  duplicate?: DuplicateInfo;
+  showDuplicate?: boolean;
 }
 
 const MAX_CONCURRENT = 2;
+
+const formatDate = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString('he-IL') : '—';
+
+const formatAmount = (amount: number | null | undefined, currency?: string | null) => {
+  if (amount === null || amount === undefined) return '—';
+  const symbol = !currency || currency === 'ILS' ? '₪' : `${currency} `;
+  return `${symbol}${amount.toLocaleString('he-IL', { maximumFractionDigits: 2 })}`;
+};
+
+function DuplicateDetails({ duplicate }: { duplicate: DuplicateInfo }) {
+  const { existing, extracted, type } = duplicate;
+  const rows: { label: string; existing: string; uploaded?: string }[] = [
+    { label: 'ספק', existing: existing.supplier_name || '—', uploaded: extracted ? extracted.supplier_name || '—' : undefined },
+    { label: 'מספר חשבונית', existing: existing.invoice_number || '—', uploaded: extracted ? extracted.invoice_number || '—' : undefined },
+    { label: 'תאריך', existing: formatDate(existing.invoice_date), uploaded: extracted ? formatDate(extracted.invoice_date) : undefined },
+    {
+      label: 'סכום',
+      existing: existing.original_amount !== null && existing.currency && existing.currency !== 'ILS'
+        ? `${formatAmount(existing.total_amount)} (${formatAmount(existing.original_amount, existing.currency)})`
+        : formatAmount(existing.total_amount),
+      uploaded: extracted ? formatAmount(extracted.total_amount) : undefined,
+    },
+    { label: 'נקלטה במערכת', existing: formatDate(existing.created_at) },
+  ];
+  const showCompare = type === 'same_invoice_number' && !!extracted;
+
+  return (
+    <div
+      style={{
+        marginTop: 'var(--space-3)',
+        padding: 'var(--space-3)',
+        background: 'var(--color-glass)',
+        border: '1px solid var(--color-glass-border)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 'var(--font-size-xs)',
+      }}
+    >
+      <div style={{ marginBottom: 'var(--space-2)', color: 'var(--color-text-secondary)' }}>
+        {type === 'identical_file'
+          ? 'הקובץ זהה בדיוק לקובץ שכבר הועלה, ולכן אי אפשר להעלות אותו שוב.'
+          : 'נמצאה חשבונית קיימת מאותו ספק עם אותו מספר. אם המספר זוהה בטעות או שזו חשבונית אחרת — אפשר להעלות בכל זאת.'}
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        {showCompare && (
+          <thead>
+            <tr style={{ color: 'var(--color-text-muted)' }}>
+              <th style={{ textAlign: 'start', fontWeight: 500, padding: '2px 0' }}></th>
+              <th style={{ textAlign: 'start', fontWeight: 500, padding: '2px var(--space-2)' }}>קיימת במערכת</th>
+              <th style={{ textAlign: 'start', fontWeight: 500, padding: '2px var(--space-2)' }}>הקובץ שהועלה</th>
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td style={{ color: 'var(--color-text-muted)', padding: '2px 0', whiteSpace: 'nowrap' }}>{row.label}</td>
+              <td style={{ padding: '2px var(--space-2)', fontWeight: 600 }}>{row.existing}</td>
+              {showCompare && (
+                <td
+                  style={{
+                    padding: '2px var(--space-2)',
+                    fontWeight: 600,
+                    color: row.uploaded !== undefined && row.uploaded !== row.existing ? 'var(--color-warning)' : undefined,
+                  }}
+                >
+                  {row.uploaded ?? ''}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {existing.drive_file_url && (
+        <a
+          href={existing.drive_file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ marginTop: 'var(--space-2)', display: 'inline-block' }}
+        >
+          📄 פתח את הקובץ הקיים ↗
+        </a>
+      )}
+    </div>
+  );
+}
 
 export default function FileUploader({ onUploadSuccess, onAllComplete, source = 'manual_upload' }: FileUploaderProps) {
   const [queue, setQueue] = useState<FileItem[]>([]);
@@ -127,39 +217,49 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
     });
   };
 
-  const processFile = async (item: FileItem) => {
+  // force = the user confirmed a same-invoice-number match is not a duplicate; skips that server check.
+  const processFile = async (item: FileItem, options: { force?: boolean } = {}) => {
     try {
-      // 1. Hashing
-      updateItem(item.id, { status: 'hashing', message: 'מחשב חתימת קובץ...' });
-      const hash = await computeFileHash(item.file);
+      if (!options.force) {
+        // 1. Hashing
+        updateItem(item.id, { status: 'hashing', message: 'מחשב חתימת קובץ...' });
+        const hash = await computeFileHash(item.file);
 
-      // 2. Check duplicate
-      updateItem(item.id, { status: 'checking_dup', message: 'בודק כפילויות...' });
-      const checkRes = await fetch('/api/invoices/check-duplicate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hash }),
-      });
-
-      if (!checkRes.ok) {
-        throw new Error('שגיאה בבדיקת כפילויות.');
-      }
-
-      const checkData = await checkRes.json();
-      if (checkData.exists) {
-        updateItem(item.id, {
-          status: 'duplicate',
-          message: `כפילות — ${checkData.invoice.supplier_name || 'ספק לא ידוע'}`,
+        // 2. Check duplicate
+        updateItem(item.id, { status: 'checking_dup', message: 'בודק כפילויות...' });
+        const checkRes = await fetch('/api/invoices/check-duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hash }),
         });
-        return;
+
+        if (!checkRes.ok) {
+          throw new Error('שגיאה בבדיקת כפילויות.');
+        }
+
+        const checkData = await checkRes.json();
+        if (checkData.exists) {
+          updateItem(item.id, {
+            status: 'duplicate',
+            message: `קובץ זהה כבר קיים — ${checkData.invoice.supplier_name || 'ספק לא ידוע'}`,
+            duplicate: { type: 'identical_file', existing: checkData.invoice },
+          });
+          return;
+        }
       }
 
       // 3. Upload + OCR
-      updateItem(item.id, { status: 'uploading', message: 'מעלה ומפענח באמצעות AI...' });
+      updateItem(item.id, {
+        status: 'uploading',
+        message: 'מעלה ומפענח באמצעות AI...',
+        duplicate: undefined,
+        showDuplicate: false,
+      });
 
       const formData = new FormData();
       formData.append('file', item.file);
       formData.append('source', source);
+      if (options.force) formData.append('force_upload', 'true');
 
       const response = await fetch('/api/invoices/upload', {
         method: 'POST',
@@ -170,9 +270,15 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
 
       if (!response.ok) {
         if (response.status === 409) {
+          const type = responseData.duplicate_type === 'same_invoice_number' ? 'same_invoice_number' : 'identical_file';
           updateItem(item.id, {
             status: 'duplicate',
-            message: 'חשבונית כפולה — כבר קיימת במערכת',
+            message: type === 'same_invoice_number'
+              ? `ייתכן שכפולה — כבר קיימת חשבונית מ${responseData.invoice?.supplier_name || 'אותו ספק'} עם אותו מספר`
+              : 'קובץ זהה כבר קיים במערכת',
+            duplicate: responseData.invoice
+              ? { type, existing: responseData.invoice, extracted: responseData.extracted }
+              : undefined,
           });
         } else {
           throw new Error(responseData.error || 'שגיאה בתהליך העיבוד.');
@@ -312,14 +418,19 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
                 <div
                   key={item.id}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-3)',
                     padding: 'var(--space-3) var(--space-4)',
                     background: 'var(--color-bg-tertiary)',
                     borderRadius: 'var(--radius-md)',
-                    border: `1px solid ${item.status === 'error' ? 'var(--color-error)' : 'var(--color-glass-border)'}`,
+                    border: `1px solid ${item.status === 'error' ? 'var(--color-error)' : item.status === 'duplicate' ? 'var(--color-warning)' : 'var(--color-glass-border)'}`,
                     transition: 'all var(--transition-fast)',
+                  }}
+                >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-3)',
+                    flexWrap: 'wrap',
                   }}
                 >
                   {/* Status Icon */}
@@ -368,6 +479,34 @@ export default function FileUploader({ onUploadSuccess, onAllComplete, source = 
                       flexShrink: 0,
                     }} />
                   )}
+
+                  {/* Duplicate actions */}
+                  {item.status === 'duplicate' && item.duplicate && (
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => updateItem(item.id, { showDuplicate: !item.showDuplicate })}
+                      >
+                        {item.showDuplicate ? 'הסתר' : '👁 הצג קיימת'}
+                      </button>
+                      {item.duplicate.type === 'same_invoice_number' && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => processFile(item, { force: true })}
+                        >
+                          זו לא כפילות — העלה
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Existing invoice details */}
+                {item.status === 'duplicate' && item.duplicate && item.showDuplicate && (
+                  <DuplicateDetails duplicate={item.duplicate} />
+                )}
                 </div>
               ))}
             </div>

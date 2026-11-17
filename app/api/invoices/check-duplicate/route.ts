@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { DUPLICATE_INVOICE_FIELDS } from '@/lib/invoices/duplicates';
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     // Check if the hash exists in the database
     const { data, error } = await supabase
       .from('invoices')
-      .select('id, supplier_name, total_amount, invoice_date, drive_file_url')
+      .select(DUPLICATE_INVOICE_FIELDS)
       .eq('content_hash', hash)
       .maybeSingle();
 
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
     if (data) {
       return NextResponse.json({
         exists: true,
+        duplicate_type: 'identical_file',
         invoice: data,
       });
     }

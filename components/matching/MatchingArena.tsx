@@ -19,7 +19,21 @@ function formatCurrency(amount: number | null, currency: string = 'ILS'): string
   }).format(amount);
 }
 
-type SortField = 'date' | 'amount' | 'name';
+type SortField = 'date' | 'amount' | 'name' | 'matched_at';
+
+/**
+ * When an expense line was matched: the latest match's created_at. Lines approved without an
+ * invoice have no match row, so fall back to the line's updated_at (set when it was approved).
+ */
+function getMatchedAt(line: any): number {
+  const matches = Array.isArray(line.matches) ? line.matches : (line.matches ? [line.matches] : []);
+  const times = matches
+    .map((m: any) => (m?.created_at ? new Date(m.created_at).getTime() : 0))
+    .filter((t: number) => t > 0);
+  if (times.length > 0) return Math.max(...times);
+  if (line.status === 'approved_no_invoice' && line.updated_at) return new Date(line.updated_at).getTime();
+  return 0;
+}
 type SortDirection = 'asc' | 'desc';
 
 /** Simple Levenshtein-based similarity (0-1) for fuzzy name matching */
@@ -353,7 +367,10 @@ export default function MatchingArena() {
   const sortData = (data: any[], sort: { field: SortField, dir: SortDirection }, type: 'invoice' | 'line') => {
     return [...data].sort((a, b) => {
       let valA, valB;
-      if (sort.field === 'date') {
+      if (sort.field === 'matched_at') {
+        valA = getMatchedAt(a);
+        valB = getMatchedAt(b);
+      } else if (sort.field === 'date') {
         valA = type === 'invoice' ? a.invoice_date : a.transaction_date;
         valB = type === 'invoice' ? b.invoice_date : b.transaction_date;
         valA = valA ? new Date(valA).getTime() : 0;
@@ -419,8 +436,20 @@ export default function MatchingArena() {
     const setSort = type === 'inv' ? setInvSort : setLineSort;
     setSort(prev => {
       if (prev.field === field) return { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
-      return { field, dir: 'asc' };
+      // Match date starts newest-first, so the last match is on top.
+      return { field, dir: field === 'matched_at' ? 'desc' : 'asc' };
     });
+  };
+
+  const changeLineFilter = (filter: LineFilter) => {
+    setLineFilter(filter);
+    if (filter === 'matched') {
+      // Most recent matches first, so a wrong match made a moment ago is easy to find.
+      setLineSort({ field: 'matched_at', dir: 'desc' });
+    } else if (filter === 'pending' && lineSort.field === 'matched_at') {
+      // Pending lines have no match date.
+      setLineSort({ field: 'date', dir: 'asc' });
+    }
   };
 
   const SortHeader = ({ type, field, label }: { type: 'inv' | 'line', field: SortField, label: string }) => {
@@ -550,6 +579,11 @@ export default function MatchingArena() {
                     ❌
                   </button>
                 </div>
+                {getMatchedAt(line) > 0 && (
+                  <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                    {line.status === 'approved_no_invoice' ? 'אושר' : 'הותאם'} ב-{new Date(getMatchedAt(line)).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
                 {line.status === 'approved_no_invoice' && line.approval_note && (
                   <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontStyle: 'italic', background: 'var(--color-bg-tertiary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                     סיבה: {line.approval_note}
@@ -658,9 +692,9 @@ export default function MatchingArena() {
               <h2 style={{ fontSize: 'var(--font-size-md)', fontWeight: 700 }}>🏦 שורות הוצאה ({filteredLines.length})</h2>
               
               <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg-tertiary)', padding: '2px', borderRadius: 'var(--radius-md)' }}>
-                <button style={getFilterStyle('all', lineFilter)} onClick={() => setLineFilter('all')}>הכל</button>
-                <button style={getFilterStyle('pending', lineFilter)} onClick={() => setLineFilter('pending')}>ממתינות</button>
-                <button style={getFilterStyle('matched', lineFilter)} onClick={() => setLineFilter('matched')}>הותאמו</button>
+                <button style={getFilterStyle('all', lineFilter)} onClick={() => changeLineFilter('all')}>הכל</button>
+                <button style={getFilterStyle('pending', lineFilter)} onClick={() => changeLineFilter('pending')}>ממתינות</button>
+                <button style={getFilterStyle('matched', lineFilter)} onClick={() => changeLineFilter('matched')}>הותאמו</button>
               </div>
             </div>
 
@@ -699,6 +733,7 @@ export default function MatchingArena() {
                 <SortHeader type="line" field="date" label="תאריך" />
                 <SortHeader type="line" field="amount" label="סכום" />
                 <SortHeader type="line" field="name" label="שם" />
+                {lineFilter !== 'pending' && <SortHeader type="line" field="matched_at" label="תאריך התאמה" />}
               </div>
             )}
 
